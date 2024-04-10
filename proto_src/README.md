@@ -1,4 +1,4 @@
-# ASMA ODS proto files 
+# ASAM ODS proto files 
 
 Put the proto files from ASAM ODS standard into this folder to rebuild the python stubs.
 
