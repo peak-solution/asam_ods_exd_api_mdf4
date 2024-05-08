@@ -1,10 +1,10 @@
 """EXD API implementation for MDF 4 files"""
 import os
-import numpy as np
-import pandas as pd
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+import threading
+from urllib.parse import urlparse
 
+import grpc
 import ods_pb2 as ods
 import ods_external_data_pb2 as exd_api
 import ods_external_data_pb2_grpc
@@ -13,31 +13,19 @@ from asammdf import MDF
 
 class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
 
-    def __init__(self):
-        self.connect_count = 0
-        self.connection_map = {}
-
-    def _get_id(self, identifier):
-        self.connect_count = self.connect_count + 1
-        rv = str(self.connect_count)
-        self.connection_map[rv] = identifier
-        return rv
-
-    def _get_path(self, file_url):
-        p = urlparse(file_url)
-        final_path = os.path.abspath(os.path.join(p.netloc, p.path))
-        return final_path
-
     def Open(self, request, context):
-        file_path = Path(self._get_path(request.url))
+        file_path = Path(self.__get_path(request.url))
         if not file_path.is_file():
             raise Exception(f'file "{request.url}" not accessible')
-        
-        request.parameters
-        connection_id = self._get_id(request)
+
+        connection_id = self.__open_mdf(request)
 
         rv = exd_api.Handle(uuid=connection_id)
         return rv
+
+    def Close(self, request, context):
+        self.__close_mdf(request)
+        return exd_api.Empty()
 
     def GetStructure(self, request, context):
 
@@ -47,101 +35,137 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
             raise NotImplementedError('Method not implemented!')
 
         identifier = self.connection_map[request.handle.uuid]
+        mdf4 = self.__get_mdf(request.handle)
 
-        with MDF(self._get_path(identifier.url)) as mdf4:
+        rv = exd_api.StructureResult(identifier=identifier)
+        rv.name = Path(identifier.url).name
+        rv.attributes.variables["start_time"].string_array.values.append(mdf4.start_time.strftime("%Y%m%d%H%M%S%f"))
 
-            rv = exd_api.StructureResult(identifier=identifier)
-            rv.name = Path(identifier.url).name
-            rv.attributes.variables["start_time"].string_array.values.append(mdf4.start_time.strftime("%Y%m%d%H%M%S%f"))
+        group_index = 0
+        for group in mdf4.groups :
 
-            group_index = 0
-            for group in mdf4.groups :
+            new_group = exd_api.StructureResult.Group()
+            new_group.name = group.channel_group.acq_name
+            new_group.id = group_index
+            new_group.total_number_of_channels = len(group.channels)
+            new_group.number_of_rows = group.channel_group.cycles_nr
+            new_group.attributes.variables["description"].string_array.values.append(group.channel_group.comment)
 
-                new_group = exd_api.StructureResult.Group()
-                new_group.name = group.channel_group.comment
-                new_group.id = group_index
-                new_group.total_number_of_channels = len(group.channels)
-                new_group.number_of_rows = group.channel_group.cycles_nr
-                new_group.attributes.variables["description"].string_array.values.append(group.channel_group.comment)
+            i = 0
+            for channel in group.channels:
+                new_channel = exd_api.StructureResult.Channel()
+                new_channel.name = channel.name
+                new_channel.id = i
+                new_channel.attributes.variables["description"].string_array.values.append(channel.comment)
+                new_channel.data_type = self.__get_channel_data_type(channel)
+                new_channel.unit_string = channel.unit
+                new_group.channels.append(new_channel)
+                i += 1
 
-                i = 0
-                for channel in group.channels:
-                    new_channel = exd_api.StructureResult.Channel()
-                    new_channel.name = channel.name
-                    new_channel.id = i
-                    new_channel.attributes.variables["description"].string_array.values.append(channel.comment)
-                    new_channel.data_type = self._get_channel_data_type(channel)
-                    new_channel.unit_string = channel.unit
-                    new_group.channels.append(new_channel)
-                    i += 1
+            rv.groups.append(new_group)
+            group_index += 1
 
-                rv.groups.append(new_group)
-                group_index += 1
-
-            return rv
+        return rv
 
     def GetValues(self, request, context):
-        identifier = self.connection_map[request.handle.uuid]
-        request.channel_ids
-        request.start
-        request.limit
 
-        with MDF(self._get_path(identifier.url)) as mdf4:
+        mdf4 = self.__get_mdf(request.handle)
 
-            if request.group_id < 0 or request.group_id >= len(mdf4.groups):
+        if request.group_id < 0 or request.group_id >= len(mdf4.groups):
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(f'Invalid group id {request.group_id}!')
+            raise NotImplementedError(f'Invalid group id {request.group_id}!')
+
+        group = mdf4.groups[request.group_id]
+
+        nr_of_rows = group.channel_group.cycles_nr
+        if request.start >= nr_of_rows:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(f'Channel start index {request.start} out of range!')
+            raise NotImplementedError(f'Channel start index {request.start} out of range!')
+
+        end_index = request.start + request.limit
+        if end_index >= nr_of_rows:
+            end_index = nr_of_rows
+
+        channels_to_load = []
+        for channel_id in request.channel_ids:
+            if channel_id >= len(group.channels):
                 context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-                context.set_details(f'Invalid group id {request.group_id}!')
-                raise NotImplementedError(f'Invalid group id {request.group_id}!')
+                context.set_details(f'Invalid channel id {channel_id}!')
+                raise NotImplementedError(f'Invalid channel id {channel_id}!')
+            channels_to_load.append((None, request.group_id, channel_id))
 
-            data = mdf4.get_group(request.group_id)
+        data = mdf4.select(channels_to_load, 
+                        raw=False,
+                        ignore_value2text_conversions=False,
+                        record_offset=request.start, 
+                        record_count=request.limit,
+                        copy_master=False)
+        if len(data) != len(request.channel_ids):
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(f'Number read {len(data)} does not match requested channel count {len(request.channel_ids)} in {mdf4.name.name}!')
+            raise NotImplementedError(f'Number read {len(data)} does not match requested channel count {len(request.channel_ids)} in {mdf4.name.name}!')
 
-            if request.start >= data.shape[0]:
-                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-                context.set_details(f'Channel start index {request.start} out of range!')
-                raise NotImplementedError(f'Channel start index {request.start} out of range!')
+        rv = exd_api.ValuesResult(id=request.group_id)
+        for index, signal in enumerate(data, start=0):
+            section = signal.samples
+            channel_id = request.channel_ids[index]
+            channel = group.channels[channel_id]
+            channel_datatype = self.__get_channel_data_type(channel)
 
-            end_index = request.start + request.limit
-            if end_index >= data.shape[0]:
-                end_index = data.shape[0]
+            new_channel_values = exd_api.ValuesResult.ChannelValues()
+            new_channel_values.id = channel_id
+            new_channel_values.values.data_type = channel_datatype
 
-            rv = exd_api.ValuesResult(id=request.group_id)
-            for channel_id in request.channel_ids:
-                if channel_id > data.shape[1]:
-                    context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-                    context.set_details(f'Invalid channel id {channel_id}!')
-                    raise NotImplementedError(f'Invalid channel id {channel_id}!')
-                
-                section = data.iloc[request.start:end_index, channel_id].index if 0 == channel_id else data.iloc[request.start:end_index, channel_id - 1]
+            if   channel_datatype == ods.DataTypeEnum.DT_BOOLEAN:
+                new_channel_values.values.boolean_array.values.extend(section)
+            elif channel_datatype == ods.DataTypeEnum.DT_BYTE:
+                new_channel_values.values.byte_array.values = section.tobytes()
+            elif channel_datatype == ods.DataTypeEnum.DT_SHORT:
+                new_channel_values.values.long_array.values[:] = section
+            elif channel_datatype == ods.DataTypeEnum.DT_LONG:
+                new_channel_values.values.long_array.values[:] = section
+            elif channel_datatype == ods.DataTypeEnum.DT_LONGLONG:
+                new_channel_values.values.longlong_array.values[:] = section
+            elif channel_datatype == ods.DataTypeEnum.DT_FLOAT:
+                new_channel_values.values.float_array.values[:] = section
+            elif channel_datatype == ods.DataTypeEnum.DT_DOUBLE:
+                new_channel_values.values.double_array.values[:] = section
+            elif channel_datatype == ods.DataTypeEnum.DT_STRING:
+                new_channel_values.values.string_array.values[:] = section
+            elif channel_datatype == ods.DataTypeEnum.DT_BYTESTR:
+                for item in section:
+                    new_channel_values.values.bytestr_array.values.append(item.tobytes())
+            else:
+                raise NotImplementedError(f'Unknown np datatype {section.dtype} for type {channel_datatype} in {mdf4.name.name}!')
 
-                new_channel_values = exd_api.ValuesResult.ChannelValues()
-                new_channel_values.id = channel_id
-                if np.float64 == section.dtype:
-                    new_channel_values.values.data_type = ods.DataTypeEnum.DT_DOUBLE
-                    new_channel_values.values.double_array.values[:] = section.values
-                if np.float32 == section.dtype:
-                    new_channel_values.values.data_type = ods.DataTypeEnum.DT_FLOAT
-                    new_channel_values.values.float_array.values[:] = section.values
-                elif np.int64 == section.dtype:
-                    new_channel_values.values.data_type = ods.DataTypeEnum.DT_LONGLONG
-                    new_channel_values.values.longlong_array.values[:] = section.values
-                elif np.int32 == section.dtype:
-                    new_channel_values.values.data_type = ods.DataTypeEnum.DT_LONG
-                    new_channel_values.values.long_array.values[:] = section.values
+            rv.channels.append(new_channel_values)
 
-                rv.channels.append(new_channel_values)
-
-            return rv
+        return rv
 
     def GetValuesEx(self, request, context):
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def Close(self, request, context):
-        identifier = self.connection_map[request.uuid]
-        return exd_api.Empty()
+    def __get_channel_data_type(self, channel):
+        rv = self.__get_channel_data_type_base(channel)
+        
+        if channel.conversion is not None:
+            if ods.DataTypeEnum.DT_STRING == rv:
+                if 9 == channel.conversion.conversion_type:
+                    # text to value tabular look-up
+                    return ods.DataTypeEnum.DT_DOUBLE
+            elif channel.conversion.conversion_type in [1, 2, 3, 4, 5]:
+                return ods.DataTypeEnum.DT_DOUBLE
+            elif channel.conversion.conversion_type in [7, 8]:
+                return ods.DataTypeEnum.DT_STRING
+        
+        return rv
 
-    def _get_channel_data_type(self, channel):
+
+    def __get_channel_data_type_base(self, channel):
         # [width="100",options="header"]
         # |====================
         # | number | cn_bit_count | DataTypeEnum | description
@@ -150,7 +174,8 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
         # | 0, 1   | 2 - 8       | DT_BYTE     | unsigned integer (LE Byte order, BE Byte order)
         # | 0, 1   | 8 - 15      | DT_SHORT    | unsigned integer (LE Byte order, BE Byte order)
         # | 0, 1   | 16 - 31     | DT_LONG     | unsigned integer (LE Byte order, BE Byte order)
-        # | 0, 1   | 32 - 64     | DT_LONGLONG | unsigned integer (LE Byte order, BE Byte order)
+        # | 0, 1   | 32 - 63     | DT_LONGLONG | unsigned integer (LE Byte order, BE Byte order)
+        # | 2, 3   | 64 - 64     | DT_DOUBLE   | signed integer (two’s complement) (LE Byte order, BE Byte order)
         # | 2, 3   | 1           | DT_BOOLEAN  | signed integer (two’s complement) (LE Byte order, BE Byte order)
         # | 2, 3   | 2 - 16      | DT_SHORT    | signed integer (two’s complement) (LE Byte order, BE Byte order)
         # | 2, 3   | 17 - 32     | DT_LONG     | signed integer (two’s complement) (LE Byte order, BE Byte order)
@@ -183,8 +208,10 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
                 return ods.DataTypeEnum.DT_SHORT
             if 16 <= mdf4_data_bit_count <= 31:
                 return ods.DataTypeEnum.DT_LONG
-            if 32 <= mdf4_data_bit_count <= 64:
+            if 32 <= mdf4_data_bit_count <= 63:
                 return ods.DataTypeEnum.DT_LONGLONG
+            if 64 <= mdf4_data_bit_count <= 64:
+                return ods.DataTypeEnum.DT_DOUBLE
         if 2 <= mdf4_data_type <= 3:
             if 1 == mdf4_data_bit_count:
                 return ods.DataTypeEnum.DT_BOOLEAN
@@ -213,6 +240,47 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
 
         return ods.DataTypeEnum.DT_DOUBLE
 
+    def __init__(self):
+        self.connect_count = 0
+        self.connection_map = {}
+        self.file_map = {}
+        self.lock = threading.Lock()
+
+    def __get_id(self, identifier):
+        self.connect_count = self.connect_count + 1
+        rv = str(self.connect_count)
+        self.connection_map[rv] = identifier
+        return rv
+
+    def __get_path(self, file_url):
+        p = urlparse(file_url)
+        final_path = os.path.abspath(os.path.join(p.netloc, p.path))
+        return final_path
+
+    def __open_mdf(self, identifier):
+        with self.lock:
+            identifier.parameters
+            connection_id = self.__get_id(identifier)
+            connection_url = self.__get_path(identifier.url)
+            if connection_url not in self.file_map:
+                self.file_map[connection_url] = { "mdf4" : MDF(connection_url), "ref_count" : 0 }
+            self.file_map[connection_url]["ref_count"] = self.file_map[connection_url]["ref_count"] + 1
+            return connection_id
+
+    def __get_mdf(self, handle):
+        identifier = self.connection_map[handle.uuid]
+        connection_url = self.__get_path(identifier.url)
+        return self.file_map[connection_url]["mdf4"]
+
+    def __close_mdf(self, handle):
+        with self.lock:
+            identifier = self.connection_map[handle.uuid]
+            connection_url = self.__get_path(identifier.url)
+            if self.file_map[connection_url]["ref_count"] > 1:
+                self.file_map[connection_url]["ref_count"] = self.file_map[connection_url]["ref_count"] - 1
+            else:
+                self.file_map[connection_url]["mdf4"].close()
+                del self.file_map[connection_url]
 
 if __name__ == '__main__':
 
