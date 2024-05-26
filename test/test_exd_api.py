@@ -13,12 +13,13 @@ import ods_external_data_pb2 as oed
 from external_data_reader import ExternalDataReader
 from google.protobuf.json_format import MessageToJson
 
+
 class TestStringMethods(unittest.TestCase):
     log = logging.getLogger(__name__)
 
     def _get_example_file_path(self, file_name):
         example_file_path = pathlib.Path.joinpath(pathlib.Path(__file__).parent.resolve(), '..', 'data', file_name)
-        return pathlib.Path(example_file_path).absolute().as_uri().replace('///', '//')
+        return pathlib.Path(example_file_path).absolute().as_uri()
 
     def test_open(self):
         service = ExternalDataReader()

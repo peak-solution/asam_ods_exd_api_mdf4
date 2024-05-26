@@ -2,7 +2,8 @@
 import os
 from pathlib import Path
 import threading
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
+from urllib.request import url2pathname
 
 import grpc
 import ods_pb2 as ods
@@ -10,6 +11,7 @@ import ods_external_data_pb2 as exd_api
 import ods_external_data_pb2_grpc
 
 from asammdf import MDF
+
 
 class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
 
@@ -42,7 +44,7 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
         rv.attributes.variables["start_time"].string_array.values.append(mdf4.start_time.strftime("%Y%m%d%H%M%S%f"))
 
         group_index = 0
-        for group in mdf4.groups :
+        for group in mdf4.groups:
 
             new_group = exd_api.StructureResult.Group()
             new_group.name = group.channel_group.acq_name
@@ -97,11 +99,11 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
             channels_to_load.append((None, request.group_id, channel_id))
 
         data = mdf4.select(channels_to_load, 
-                        raw=False,
-                        ignore_value2text_conversions=False,
-                        record_offset=request.start, 
-                        record_count=request.limit,
-                        copy_master=False)
+                           raw=False,
+                           ignore_value2text_conversions=False,
+                           record_offset=request.start, 
+                           record_count=request.limit,
+                           copy_master=False)
         if len(data) != len(request.channel_ids):
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(f'Number read {len(data)} does not match requested channel count {len(request.channel_ids)} in {mdf4.name.name}!')
@@ -118,7 +120,7 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
             new_channel_values.id = channel_id
             new_channel_values.values.data_type = channel_datatype
 
-            if   channel_datatype == ods.DataTypeEnum.DT_BOOLEAN:
+            if channel_datatype == ods.DataTypeEnum.DT_BOOLEAN:
                 new_channel_values.values.boolean_array.values.extend(section)
             elif channel_datatype == ods.DataTypeEnum.DT_BYTE:
                 new_channel_values.values.byte_array.values = section.tobytes()
@@ -151,7 +153,6 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
 
     def __get_channel_data_type(self, channel):
         rv = self.__get_channel_data_type_base(channel)
-        
         if channel.conversion is not None:
             if ods.DataTypeEnum.DT_STRING == rv:
                 if 9 == channel.conversion.conversion_type:
@@ -161,9 +162,7 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
                 return ods.DataTypeEnum.DT_DOUBLE
             elif channel.conversion.conversion_type in [7, 8]:
                 return ods.DataTypeEnum.DT_STRING
-        
         return rv
-
 
     def __get_channel_data_type_base(self, channel):
         # [width="100",options="header"]
@@ -252,18 +251,24 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
         self.connection_map[rv] = identifier
         return rv
 
-    def __get_path(self, file_url):
-        p = urlparse(file_url)
-        final_path = os.path.abspath(os.path.join(p.netloc, p.path))
-        return final_path
+    def __uri_to_path(self, uri):
+        parsed = urlparse(uri)
+        host = "{0}{0}{mnt}{0}".format(os.path.sep, mnt=parsed.netloc)
+        return os.path.normpath(
+            os.path.join(host, url2pathname(unquote(parsed.path)))
+        )
 
+    def __get_path(self, file_url):
+        final_path = self.__uri_to_path(file_url)
+        return final_path
+    
     def __open_mdf(self, identifier):
         with self.lock:
             identifier.parameters
             connection_id = self.__get_id(identifier)
             connection_url = self.__get_path(identifier.url)
             if connection_url not in self.file_map:
-                self.file_map[connection_url] = { "mdf4" : MDF(connection_url), "ref_count" : 0 }
+                self.file_map[connection_url] = {"mdf4": MDF(connection_url), "ref_count": 0}
             self.file_map[connection_url]["ref_count"] = self.file_map[connection_url]["ref_count"] + 1
             return connection_id
 
@@ -282,6 +287,7 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
                 self.file_map[connection_url]["mdf4"].close()
                 del self.file_map[connection_url]
 
+
 if __name__ == '__main__':
 
     from google.protobuf.json_format import MessageToJson
@@ -294,4 +300,4 @@ if __name__ == '__main__':
     print(MessageToJson(structure))
 
     print(MessageToJson(external_data_reader.GetValues(
-        exd_api.ValuesRequest(handle=handle, group_id=0, channel_ids=[0,1,2,3,4,5,6,7,8,9], start=0, limit=10), None)))
+        exd_api.ValuesRequest(handle=handle, group_id=0, channel_ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], start=0, limit=10), None)))
