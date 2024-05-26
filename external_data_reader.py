@@ -98,10 +98,10 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
                 raise NotImplementedError(f'Invalid channel id {channel_id}!')
             channels_to_load.append((None, request.group_id, channel_id))
 
-        data = mdf4.select(channels_to_load, 
+        data = mdf4.select(channels_to_load,
                            raw=False,
                            ignore_value2text_conversions=False,
-                           record_offset=request.start, 
+                           record_offset=request.start,
                            record_count=request.limit,
                            copy_master=False)
         if len(data) != len(request.channel_ids):
@@ -261,7 +261,7 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
     def __get_path(self, file_url):
         final_path = self.__uri_to_path(file_url)
         return final_path
-    
+
     def __open_mdf(self, identifier):
         with self.lock:
             identifier.parameters
