@@ -134,6 +134,18 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
                 new_channel_values.values.float_array.values[:] = section
             elif channel_datatype == ods.DataTypeEnum.DT_DOUBLE:
                 new_channel_values.values.double_array.values[:] = section
+            elif channel_datatype == ods.DataTypeEnum.DT_COMPLEX:
+                real_values = []
+                for complex_value in section:
+                    real_values.append(complex_value.real)
+                    real_values.append(complex_value.imag)
+                new_channel_values.values.float_array.values[:] = real_values
+            elif channel_datatype == ods.DataTypeEnum.DT_DCOMPLEX:
+                real_values = []
+                for complex_value in section:
+                    real_values.append(complex_value.real)
+                    real_values.append(complex_value.imag)
+                new_channel_values.values.double_array.values[:] = real_values
             elif channel_datatype == ods.DataTypeEnum.DT_STRING:
                 new_channel_values.values.string_array.values[:] = section
             elif channel_datatype == ods.DataTypeEnum.DT_BYTESTR:
@@ -193,8 +205,8 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
         # | 12     |             | DT_BYTESTR  | MIME stream (all samples of channel represent a stream with MIME content-type specified in cn_md_unit)
         # | 13     |             | DT_DATE     | CANopen date (Based on 7 Byte CANopen Date data structure, see Table 39)
         # | 14     |             | DT_DATE     | CANopen time (Based on 6 Byte CANopen Time data structure, see Table 40)
-        # | 15, 16 | 16, 32      | DT_COMPLEX  | complex number (real part followed by imaginary part, stored as two floating-point data, both with 2, 4 or 8 Byte, LE Byte order, BE Byte order)
-        # | 15, 16 | 64          | DT_DCOMPLEX | complex number (real part followed by imaginary part, stored as two floating-point data, both with 2, 4 or 8 Byte, LE Byte order, BE Byte order)
+        # | 15, 16 | 16, 32, 64  | DT_COMPLEX  | complex number (real part followed by imaginary part, stored as two floating-point data, both with 2, 4 or 8 Byte, LE Byte order, BE Byte order)
+        # | 15, 16 | 128         | DT_DCOMPLEX | complex number (real part followed by imaginary part, stored as two floating-point data, both with 2, 4 or 8 Byte, LE Byte order, BE Byte order)
         # |====================
         mdf4_data_type = channel.data_type
         mdf4_data_bit_count = channel.bit_count
@@ -232,9 +244,9 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
         if 13 <= mdf4_data_type <= 14:
             return ods.DataTypeEnum.DT_DATE
         if 15 <= mdf4_data_type <= 16:
-            if 1 <= mdf4_data_bit_count <= 32:
+            if 1 <= mdf4_data_bit_count <= 64:
                 return ods.DataTypeEnum.DT_COMPLEX
-            if 33 <= mdf4_data_bit_count <= 64:
+            if 65 <= mdf4_data_bit_count <= 128:
                 return ods.DataTypeEnum.DT_DCOMPLEX
 
         return ods.DataTypeEnum.DT_DOUBLE
