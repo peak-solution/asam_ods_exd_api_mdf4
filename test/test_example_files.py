@@ -37,7 +37,7 @@ class TestExampleFiles(unittest.TestCase):
             service.Close(handle, None)
 
     def test_files(self):
-        """test loops over alll files and checks if values do match info in structure"""
+        """test loops over all files and checks if values do match info in structure"""
         example_files_folder = pathlib.Path.joinpath(pathlib.Path(__file__).parent.resolve(), '..', 'data', 'examples')
         example_files = [y for x in os.walk(example_files_folder) for y in glob(os.path.join(x[0], '*.mf4'))]
 
