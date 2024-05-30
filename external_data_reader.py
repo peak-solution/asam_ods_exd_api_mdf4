@@ -81,7 +81,7 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
         group = mdf4.groups[request.group_id]
 
         nr_of_rows = group.channel_group.cycles_nr
-        if request.start >= nr_of_rows:
+        if request.start > nr_of_rows:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(f'Channel start index {request.start} out of range!')
             raise NotImplementedError(f'Channel start index {request.start} out of range!')
