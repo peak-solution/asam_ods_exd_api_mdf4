@@ -1,43 +1,76 @@
-"""EXD API implementation for MDF 4 files"""
+"""
+ASAM ODS EXD API implementation for MDF 4 files
+"""
+
 import os
 from pathlib import Path
 import threading
 from urllib.parse import urlparse, unquote
 from urllib.request import url2pathname
 
+from asammdf import MDF
 import grpc
+
+# pylint: disable=E1101
 import ods_pb2 as ods
 import ods_external_data_pb2 as exd_api
 import ods_external_data_pb2_grpc
 
-from asammdf import MDF
-
 
 class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
+    """
+    This class implements the ASAM ODS EXD API to read MDF4 files.
+    """
 
-    def Open(self, request, context):
-        file_path = Path(self.__get_path(request.url))
+    def Open(self, identifier: exd_api.Identifier, context: dict) -> exd_api.Handle:
+        """
+        Signals an open access to an resource. The server will call `close`later on.
+
+        :param exd_api.Identifier identifier: Contains parameters and file url
+        :param dict context: Additional parameters from grpc
+        :raises ValueError: If file does not exist
+        :return exd_api.Handle: Handle to the opened file.
+        """
+        file_path = Path(self.__get_path(identifier.url))
         if not file_path.is_file():
-            raise Exception(f'file "{request.url}" not accessible')
+            raise ValueError(f'File "{identifier.url}" not accessible from plugin.')
 
-        connection_id = self.__open_mdf(request)
+        connection_id = self.__open_mdf(identifier)
 
         rv = exd_api.Handle(uuid=connection_id)
         return rv
 
-    def Close(self, request, context):
-        self.__close_mdf(request)
+    def Close(self, handle: exd_api.Handle, context: dict) -> exd_api.Empty:
+        """
+        Close resource opened before and signal the plugin that it is no longer used.
+
+        :param exd_api.Handle handle: Handle to a resource returned before.
+        :param dict context: Additional parameters from grpc.
+        :return exd_api.Empty: Empty object.
+        """
+        self.__close_mdf(handle)
         return exd_api.Empty()
 
-    def GetStructure(self, request, context):
+    def GetStructure(self, structure_request: exd_api.StructureRequest, context: dict) -> exd_api.StructureResult:
+        """
+        Get the structure of the file returned as file-group-channel hierarchy.
 
-        if request.suppress_channels or request.suppress_attributes or 0 != len(request.channel_names):
+        :param exd_api.StructureRequest structure_request: Defines what to extract from the file structure.
+        :param dict context: Additional parameters from grpc.
+        :raises NotImplementedError: If advanced features are requested.
+        :return exd_api.StructureResult: The structure of the opened file.
+        """
+        if (
+            structure_request.suppress_channels
+            or structure_request.suppress_attributes
+            or 0 != len(structure_request.channel_names)
+        ):
             context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-            context.set_details('Method not implemented!')
-            raise NotImplementedError('Method not implemented!')
+            context.set_details("Method not implemented!")
+            raise NotImplementedError("Method not implemented!")
 
-        identifier = self.connection_map[request.handle.uuid]
-        mdf4 = self.__get_mdf(request.handle)
+        identifier = self.connection_map[structure_request.handle.uuid]
+        mdf4 = self.__get_mdf(structure_request.handle)
 
         rv = exd_api.StructureResult(identifier=identifier)
         rv.name = Path(identifier.url).name
@@ -69,50 +102,63 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
 
         return rv
 
-    def GetValues(self, request, context):
+    def GetValues(self, values_request: exd_api.ValuesRequest, context: dict) -> exd_api.ValuesResult:
+        """
+        Retrieve channel/signal data identified by `values_request`.
 
-        mdf4 = self.__get_mdf(request.handle)
+        :param exd_api.ValuesRequest values_request: Defines the group and its channels to be retrieved.
+        :param dict context: Additional grpc parameters.
+        :raises NotImplementedError: If unknown data type is accessed.
+        :return exd_api.ValuesResult: The chunk of bulk data.
+        """
+        mdf4 = self.__get_mdf(values_request.handle)
 
-        if request.group_id < 0 or request.group_id >= len(mdf4.groups):
+        if values_request.group_id < 0 or values_request.group_id >= len(mdf4.groups):
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(f'Invalid group id {request.group_id}!')
-            raise NotImplementedError(f'Invalid group id {request.group_id}!')
+            context.set_details(f"Invalid group id {values_request.group_id}!")
+            raise NotImplementedError(f"Invalid group id {values_request.group_id}!")
 
-        group = mdf4.groups[request.group_id]
+        group = mdf4.groups[values_request.group_id]
 
         nr_of_rows = group.channel_group.cycles_nr
-        if request.start > nr_of_rows:
+        if values_request.start > nr_of_rows:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(f'Channel start index {request.start} out of range!')
-            raise NotImplementedError(f'Channel start index {request.start} out of range!')
+            context.set_details(f"Channel start index {values_request.start} out of range!")
+            raise NotImplementedError(f"Channel start index {values_request.start} out of range!")
 
-        end_index = request.start + request.limit
+        end_index = values_request.start + values_request.limit
         if end_index >= nr_of_rows:
             end_index = nr_of_rows
 
         channels_to_load = []
-        for channel_id in request.channel_ids:
+        for channel_id in values_request.channel_ids:
             if channel_id >= len(group.channels):
                 context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-                context.set_details(f'Invalid channel id {channel_id}!')
-                raise NotImplementedError(f'Invalid channel id {channel_id}!')
-            channels_to_load.append((None, request.group_id, channel_id))
+                context.set_details(f"Invalid channel id {channel_id}!")
+                raise NotImplementedError(f"Invalid channel id {channel_id}!")
+            channels_to_load.append((None, values_request.group_id, channel_id))
 
-        data = mdf4.select(channels_to_load,
-                           raw=False,
-                           ignore_value2text_conversions=False,
-                           record_offset=request.start,
-                           record_count=request.limit,
-                           copy_master=False)
-        if len(data) != len(request.channel_ids):
+        data = mdf4.select(
+            channels_to_load,
+            raw=False,
+            ignore_value2text_conversions=False,
+            record_offset=values_request.start,
+            record_count=values_request.limit,
+            copy_master=False,
+        )
+        if len(data) != len(values_request.channel_ids):
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(f'Number read {len(data)} does not match requested channel count {len(request.channel_ids)} in {mdf4.name.name}!')
-            raise NotImplementedError(f'Number read {len(data)} does not match requested channel count {len(request.channel_ids)} in {mdf4.name.name}!')
+            context.set_details(
+                f"Number read {len(data)} does not match requested channel count {len(values_request.channel_ids)} in {mdf4.name.name}!"
+            )
+            raise NotImplementedError(
+                f"Number read {len(data)} does not match requested channel count {len(values_request.channel_ids)} in {mdf4.name.name}!"
+            )
 
-        rv = exd_api.ValuesResult(id=request.group_id)
+        rv = exd_api.ValuesResult(id=values_request.group_id)
         for index, signal in enumerate(data, start=0):
             section = signal.samples
-            channel_id = request.channel_ids[index]
+            channel_id = values_request.channel_ids[index]
             channel = group.channels[channel_id]
             channel_datatype = self.__get_channel_data_type(channel)
 
@@ -152,16 +198,26 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
                 for item in section:
                     new_channel_values.values.bytestr_array.values.append(item.tobytes())
             else:
-                raise NotImplementedError(f'Unknown np datatype {section.dtype} for type {channel_datatype} in {mdf4.name.name}!')
+                raise NotImplementedError(
+                    f"Unknown np datatype {section.dtype} for type {channel_datatype} in {mdf4.name.name}!"
+                )
 
             rv.channels.append(new_channel_values)
 
         return rv
 
-    def GetValuesEx(self, request, context):
+    def GetValuesEx(self, request: exd_api.ValuesExRequest, context: dict) -> exd_api.ValuesExResult:
+        """
+        Method to access virtual groups and channels. Currently not supported by the plugin
+
+        :param exd_api.ValuesExRequest request: Defines virtual groups and channels to be accessed.
+        :param dict context: Additional grpc parameters.
+        :raises NotImplementedError: Currently not implemented. Only needed for very advanced use.
+        :return exd_api.ValuesExResult: Bulk values requested.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
 
     def __get_channel_data_type(self, channel):
         rv = self.__get_channel_data_type_base(channel)
@@ -265,10 +321,8 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
 
     def __uri_to_path(self, uri):
         parsed = urlparse(uri)
-        host = "{0}{0}{mnt}{0}".format(os.path.sep, mnt=parsed.netloc)
-        return os.path.normpath(
-            os.path.join(host, url2pathname(unquote(parsed.path)))
-        )
+        host = f"{os.path.sep}{os.path.sep}{parsed.netloc}{os.path.sep}"
+        return os.path.normpath(os.path.join(host, url2pathname(unquote(parsed.path))))
 
     def __get_path(self, file_url):
         final_path = self.__uri_to_path(file_url)
@@ -300,16 +354,26 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
                 del self.file_map[connection_url]
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     from google.protobuf.json_format import MessageToJson
 
     external_data_reader = ExternalDataReader()
 
-    handle = external_data_reader.Open(exd_api.Identifier(url="file://C:/build/asammdf/data/pendulum_1686037830.mf4"), None)
-    request = exd_api.StructureRequest(handle=handle)
-    structure = external_data_reader.GetStructure(request, None)
-    print(MessageToJson(structure))
+    exd_api_handle = external_data_reader.Open(
+        exd_api.Identifier(url="file://C:/build/asammdf/data/pendulum_1686037830.mf4"), None
+    )
+    exd_api_request = exd_api.StructureRequest(handle=exd_api_handle)
+    exd_api_structure = external_data_reader.GetStructure(exd_api_request, None)
+    print(MessageToJson(exd_api_structure))
 
-    print(MessageToJson(external_data_reader.GetValues(
-        exd_api.ValuesRequest(handle=handle, group_id=0, channel_ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], start=0, limit=10), None)))
+    print(
+        MessageToJson(
+            external_data_reader.GetValues(
+                exd_api.ValuesRequest(
+                    handle=exd_api_handle, group_id=0, channel_ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], start=0, limit=10
+                ),
+                None,
+            )
+        )
+    )

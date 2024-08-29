@@ -1,25 +1,19 @@
 # Prepare python to use GRPC interface:
 # python -m grpc_tools.protoc --proto_path=proto_src --pyi_out=. --python_out=. --grpc_python_out=. ods.proto ods_external_data.proto
 import sys, os
+
 sys.path.append(os.path.dirname(os.path.realpath(__file__)) + "/..")
 
 import logging
 import pathlib
 import unittest
-from datetime import datetime
-import tempfile
-from pathlib import Path
 from glob import glob
 
-import numpy as np
-
+# pylint: disable=E1101
 import ods_pb2 as ods
 import ods_external_data_pb2 as oed
 
 from external_data_reader import ExternalDataReader
-from google.protobuf.json_format import MessageToJson
-
-from asammdf import MDF, Signal
 
 
 class TestExampleFiles(unittest.TestCase):
@@ -27,9 +21,7 @@ class TestExampleFiles(unittest.TestCase):
 
     def __load_structure(self, example_file_uri):
         service = ExternalDataReader()
-        handle = service.Open(oed.Identifier(
-            url = example_file_uri,
-            parameters = ""), None)
+        handle = service.Open(oed.Identifier(url=example_file_uri, parameters=""), None)
         try:
             structure = service.GetStructure(oed.StructureRequest(handle=handle), None)
             return structure
@@ -38,30 +30,37 @@ class TestExampleFiles(unittest.TestCase):
 
     def test_files(self):
         """test loops over all files and checks if values do match info in structure"""
-        example_files_folder = pathlib.Path.joinpath(pathlib.Path(__file__).parent.resolve(), '..', 'data', 'examples')
-        example_files = [y for x in os.walk(example_files_folder) for y in glob(os.path.join(x[0], '*.mf4'))]
+        example_files_folder = pathlib.Path.joinpath(pathlib.Path(__file__).parent.resolve(), "..", "data", "examples")
+        example_files = [y for x in os.walk(example_files_folder) for y in glob(os.path.join(x[0], "*.mf4"))]
 
         failed = False
         for example_file in example_files:
             example_file_uri = pathlib.Path(example_file).absolute().resolve().as_uri()
-            print(f'URI: {example_file_uri}')
+            print(f"URI: {example_file_uri}")
             try:
-                self.log.info("Retrieve structure")            
+                self.log.info("Retrieve structure")
                 structure = self.__load_structure(example_file_uri)
-                self.assertNotEqual(structure.name, '')
-                self.assertNotEqual(structure.identifier.url, '')
+                self.assertNotEqual(structure.name, "")
+                self.assertNotEqual(structure.identifier.url, "")
 
-                self.log.info("Check bulk load")            
+                self.log.info("Check bulk load")
                 service = ExternalDataReader()
-                handle = service.Open(oed.Identifier(
-                    url = example_file_uri,
-                    parameters = ""), None)
+                handle = service.Open(oed.Identifier(url=example_file_uri, parameters=""), None)
                 try:
                     for group in structure.groups:
                         channel_ids = []
                         for channel in group.channels:
                             channel_ids.append(channel.id)
-                        values = service.GetValues(oed.ValuesRequest(handle=handle, group_id=group.id, start=0, limit=group.number_of_rows + 10, channel_ids=channel_ids), None)
+                        values = service.GetValues(
+                            oed.ValuesRequest(
+                                handle=handle,
+                                group_id=group.id,
+                                start=0,
+                                limit=group.number_of_rows + 10,
+                                channel_ids=channel_ids,
+                            ),
+                            None,
+                        )
                         for values_channel_index, values_channel in enumerate(values.channels):
                             structure_channel = group.channels[values_channel_index]
                             self.assertEqual(values_channel.id, structure_channel.id)
@@ -112,5 +111,6 @@ class TestExampleFiles(unittest.TestCase):
 
         self.assertFalse(failed, "At least one file failed")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
