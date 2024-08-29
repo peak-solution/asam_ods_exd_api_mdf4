@@ -17,18 +17,14 @@ python -m grpc_tools.protoc --proto_path=proto_src --pyi_out=. --python_out=. --
 
 ## Content
 
-### `exd_api_server.py`
+### Implementation
+* [exd_api_server.py](../blob/main/exd_api_server.py)<br>
+  Runs the GRPC service to be accessed using http-2.
+* [external_data_reader.py](../blob/main/external_data_reader.py)<br>
+  Implements the EXD-API interface to access MDF4 files using [asammdf](https://pypi.org/project/asammdf/).
 
-Runs the GRPC service to be accessed using http-2.
-
-### `external_data_reader.py`
-
-Implements the EXD-API interface to access MDF4 files using [asammdf](https://pypi.org/project/asammdf/).
-
-### `exd_api_test.py`
-
-Some basic tests on example files in `data` folder.
-
-### `example_access_exd_api_mdf4.ipynb`
-
-jupyter notebook the shows communication done by ASAM ODS server or Importer using the EXD-API plugin.
+### Tests
+* [exd_api_test.py](../blob/main/exd_api_test.py)<br>
+  Some basic tests on example files in `data` folder.
+* [example_access_exd_api_mdf4.ipynb](../blob/main/example_access_exd_api_mdf4.ipynb)<br>
+  jupyter notebook the shows communication done by ASAM ODS server or Importer using the EXD-API plugin.
