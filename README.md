@@ -24,7 +24,7 @@ python -m grpc_tools.protoc --proto_path=proto_src --pyi_out=. --python_out=. --
   Implements the EXD-API interface to access MDF4 files using [asammdf](https://pypi.org/project/asammdf/).
 
 ### Tests
-* [exd_api_test.py](exd_api_test.py)<br>
+* [test_exd_api.py](test/test_exd_api.py)<br>
   Some basic tests on example files in `data` folder.
 * [example_access_exd_api_mdf4.ipynb](example_access_exd_api_mdf4.ipynb)<br>
   jupyter notebook the shows communication done by ASAM ODS server or Importer using the EXD-API plugin.
