@@ -28,3 +28,41 @@ python -m grpc_tools.protoc --proto_path=proto_src --pyi_out=. --python_out=. --
   Some basic tests on example files in `data` folder.
 * [example_access_exd_api_mdf4.ipynb](example_access_exd_api_mdf4.ipynb)<br>
   jupyter notebook the shows communication done by ASAM ODS server or Importer using the EXD-API plugin.
+
+## Usage in ODS Server
+
+```mermaid
+sequenceDiagram
+
+actor CLIENT as Client
+participant PDTT as 🛠️Importer
+participant PODS as 🗃️ASAM ODS server 
+participant PLUGIN as 📊EXD-API plugin
+participant FILE as 🗂️File Storage
+
+autonumber
+
+opt Import phase
+  FILE ->>+ PDTT: New file shows up
+  PDTT ->>+ PLUGIN : Get Structure
+  PLUGIN -> FILE: Extract content information
+  PLUGIN ->> PLUGIN: Create Structure
+  PLUGIN ->>- PDTT: Return Structure
+  PDTT ->> PODS: Import ODS structure
+  Note right of PDTT: Create hierarchy<br/>AoTest,AoMeasurement,...
+  PDTT ->>- PODS: Add External Data info
+  Note right of PDTT: Attach AoFile ... for external data<br/>AoFile,AoSubmatrix,AoLocalColumn,...
+end
+
+Note over CLIENT, FILE: Now we can work with the imported files
+
+loop Runtime phase
+  CLIENT ->> PODS: Establish ODS session
+  CLIENT ->> PODS: Work with meta data imported from structure
+  CLIENT ->> PODS: Access external channel in preview
+  PODS ->> PLUGIN: GetValues
+  PLUGIN ->> FILE: Get Channel values
+  PLUGIN ->> PODS: Return values of channels
+  PODS ->> CLIENT: Return values needed for plot
+end
+```
