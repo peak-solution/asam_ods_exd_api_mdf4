@@ -254,6 +254,70 @@ class TestDataTypes(unittest.TestCase):
             finally:
                 service.Close(handle, None)
 
+    def test_independent(self):
+        with tempfile.TemporaryDirectory() as temporary_directory_name:
+            file_path = os.path.join(temporary_directory_name, "independent_test.mf4")
+
+            with MDF(version="4.10", file_comment="independent_test.mf4") as mdf4:
+                mdf4.start_time = datetime.now()
+
+                timestamps = [0, 1]
+
+                sigs = []
+                sigs.append(
+                    Signal(
+                        samples=np.array([2, 4], np.int32),
+                        timestamps=timestamps,
+                        comment="int32 data",
+                        name="int32_data",
+                        unit="ns",
+                    )
+                )
+                mdf4.append(sigs, comment="group", common_timebase=True)
+
+                mdf4.save(file_path, compression=2, overwrite=True)
+
+            service = ExternalDataReader()
+            handle = service.Open(oed.Identifier(url=Path(file_path).resolve().as_uri(), parameters=""), None)
+            try:
+                structure = service.GetStructure(oed.StructureRequest(handle=handle), None)
+                self.log.info(MessageToJson(structure))
+                print(MessageToJson(structure))
+
+                self.assertEqual(structure.name, "independent_test.mf4")
+                self.assertEqual(len(structure.groups), 1)
+                self.assertEqual(structure.groups[0].number_of_rows, 2)
+                self.assertEqual(len(structure.groups[0].channels), 2)
+
+                self.assertEqual("time", structure.groups[0].channels[0].name)
+                self.assertEqual("int32_data", structure.groups[0].channels[1].name)
+
+                self.assertEqual(structure.groups[0].channels[0].data_type, ods.DataTypeEnum.DT_DOUBLE)
+                self.assertEqual(structure.groups[0].channels[1].data_type, ods.DataTypeEnum.DT_LONG)
+
+                self.assertTrue("independent" in structure.groups[0].channels[0].attributes.variables)
+                self.assertEqual(
+                    1, structure.groups[0].channels[0].attributes.variables["independent"].long_array.values[0]
+                )
+                self.assertTrue("independent" not in structure.groups[0].channels[1].attributes.variables)
+
+                self.assertTrue("description" not in structure.groups[0].channels[0].attributes.variables)
+                self.assertTrue("description" in structure.groups[0].channels[1].attributes.variables)
+                self.assertEqual(
+                    "int32 data",
+                    structure.groups[0].channels[1].attributes.variables["description"].string_array.values[0],
+                )
+
+                values = service.GetValues(
+                    oed.ValuesRequest(handle=handle, group_id=0, start=0, limit=2, channel_ids=[0, 1]), None
+                )
+                self.assertEqual(values.channels[0].values.data_type, ods.DataTypeEnum.DT_DOUBLE)
+                self.assertSequenceEqual(values.channels[0].values.double_array.values, [0.0, 1.0])
+                self.assertEqual(values.channels[1].values.data_type, ods.DataTypeEnum.DT_LONG)
+                self.assertSequenceEqual(values.channels[1].values.long_array.values, [2, 4])
+            finally:
+                service.Close(handle, None)
+
 
 if __name__ == "__main__":
     unittest.main()

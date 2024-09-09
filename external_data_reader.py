@@ -76,8 +76,7 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
         rv.name = Path(identifier.url).name
         rv.attributes.variables["start_time"].string_array.values.append(mdf4.start_time.strftime("%Y%m%d%H%M%S%f"))
 
-        group_index = 0
-        for group in mdf4.groups:
+        for group_index, group in enumerate(mdf4.groups):
 
             new_group = exd_api.StructureResult.Group()
             new_group.name = group.channel_group.acq_name
@@ -86,19 +85,19 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
             new_group.number_of_rows = group.channel_group.cycles_nr
             new_group.attributes.variables["description"].string_array.values.append(group.channel_group.comment)
 
-            i = 0
-            for channel in group.channels:
+            for channel_index, channel in enumerate(group.channels):
                 new_channel = exd_api.StructureResult.Channel()
                 new_channel.name = channel.name
-                new_channel.id = i
-                new_channel.attributes.variables["description"].string_array.values.append(channel.comment)
+                new_channel.id = channel_index
                 new_channel.data_type = self.__get_channel_data_type(channel)
                 new_channel.unit_string = channel.unit
+                if channel.comment is not None and "" != channel.comment:
+                    new_channel.attributes.variables["description"].string_array.values.append(channel.comment)
+                if 0 == channel_index:
+                    new_channel.attributes.variables["independent"].long_array.values.append(1)
                 new_group.channels.append(new_channel)
-                i += 1
 
             rv.groups.append(new_group)
-            group_index += 1
 
         return rv
 
@@ -156,9 +155,9 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
             )
 
         rv = exd_api.ValuesResult(id=values_request.group_id)
-        for index, signal in enumerate(data, start=0):
+        for signal_index, signal in enumerate(data, start=0):
             section = signal.samples
-            channel_id = values_request.channel_ids[index]
+            channel_id = values_request.channel_ids[signal_index]
             channel = group.channels[channel_id]
             channel_datatype = self.__get_channel_data_type(channel)
 
