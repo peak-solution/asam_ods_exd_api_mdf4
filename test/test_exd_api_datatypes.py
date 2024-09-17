@@ -164,6 +164,7 @@ class TestDataTypes(unittest.TestCase):
                         comment="string data",
                         name="string_data",
                         unit="ns",
+                        encoding="utf-8",
                     )
                 )
                 mdf4.append(sigs, comment="group_string", common_timebase=True)
