@@ -3,3 +3,4 @@
 .vscode/
 __pycache__/
 /data/examples/internal_test_files/
+.coverage

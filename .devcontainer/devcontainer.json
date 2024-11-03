@@ -1,0 +1,49 @@
+{
+    "name": "Jupyter Dev Container",
+    "image": "mcr.microsoft.com/vscode/devcontainers/python:3.12",
+    "features": {
+        "docker-in-docker": "latest"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+				"editorconfig.editorconfig",
+                "github.vscode-pull-request-github",
+                "github.vscode-github-actions",
+                "ms-toolsai.python-ds-extension-pack",
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-python.flake8",
+                "ms-python.black-formatter",
+                "ms-python.isort",
+                "ms-python.pylint",
+				"ms-vsliveshare.vsliveshare",
+				"ryanluker.vscode-coverage-gutters",
+                "streetsidesoftware.code-spell-checker",
+                "ms-vscode.live-server",
+                "GitHub.copilot"
+            ],
+            "settings": {
+                "python.defaultInterpreterPath": "/usr/local/bin/python",
+                "black-formatter.path": [
+                    "/usr/local/py-utils/bin/black"
+                ],
+                "pylint.path": [
+                    "/usr/local/py-utils/bin/pylint"
+                ],
+                "flake8.path": [
+                    "/usr/local/py-utils/bin/flake8"
+                ],
+                "isort.path": [
+                    "/usr/local/py-utils/bin/isort"
+                ],
+                "terminal.integrated.shell.linux": "/bin/bash"
+            }
+        }
+    },
+    "postCreateCommand": "python -m pip install --upgrade pip && pip install coverage isort jupyterlab odsbox[exd-data] grpcio grpcio-tools pandas asammdf",
+    "forwardPorts": [
+        8888
+    ],
+    "remoteUser": "vscode"
+}
