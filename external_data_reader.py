@@ -9,7 +9,7 @@ from urllib.parse import urlparse, unquote
 from urllib.request import url2pathname
 
 from asammdf import MDF
-from asammdf.blocks.v4_blocks import Channel, ChannelConversion
+from asammdf.blocks.v4_blocks import Channel, ChannelConversion, HeaderBlock
 import grpc
 
 # pylint: disable=E1101
@@ -34,8 +34,11 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
         """
         file_path = Path(self.__get_path(identifier.url))
         if not file_path.is_file():
-            context.abort(grpc.StatusCode.NOT_FOUND, f"File '{
-                          identifier.url}' not found.")
+            context.abort(
+                grpc.StatusCode.NOT_FOUND,
+                f"File '{
+                          identifier.url}' not found.",
+            )
 
         connection_id = self.__open_mdf(identifier)
 
@@ -53,9 +56,9 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
         self.__close_mdf(handle)
         return exd_api.Empty()
 
-    def GetStructure(self,
-                     structure_request: exd_api.StructureRequest,
-                     context: grpc.ServicerContext) -> exd_api.StructureResult:
+    def GetStructure(
+        self, structure_request: exd_api.StructureRequest, context: grpc.ServicerContext
+    ) -> exd_api.StructureResult:
         """
         Get the structure of the file returned as file-group-channel hierarchy.
 
@@ -69,16 +72,17 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
             or structure_request.suppress_attributes
             or 0 != len(structure_request.channel_names)
         ):
-            context.abort(grpc.StatusCode.UNIMPLEMENTED,
-                          "Method not implemented!")
+            context.abort(grpc.StatusCode.UNIMPLEMENTED, "Method not implemented!")
 
         identifier = self.connection_map[structure_request.handle.uuid]
         mdf4 = self.__get_mdf(structure_request.handle)
 
+        start_time_ods = mdf4.start_time.strftime("%Y%m%d%H%M%S%f")
+
         rv = exd_api.StructureResult(identifier=identifier)
         rv.name = Path(identifier.url).name
-        rv.attributes.variables["start_time"].string_array.values.append(
-            mdf4.start_time.strftime("%Y%m%d%H%M%S%f"))
+        rv.attributes.variables["start_time"].string_array.values.append(start_time_ods)
+        self.__add_file_header(mdf4.header, rv.attributes)
 
         for group_index, group in enumerate(mdf4.groups):
 
@@ -87,8 +91,8 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
             new_group.id = group_index
             new_group.total_number_of_channels = len(group.channels)
             new_group.number_of_rows = group.channel_group.cycles_nr
-            new_group.attributes.variables["description"].string_array.values.append(
-                group.channel_group.comment)
+            new_group.attributes.variables["description"].string_array.values.append(group.channel_group.comment)
+            new_group.attributes.variables["measurement_begin"].string_array.values.append(start_time_ods)
 
             for channel_index, channel in enumerate(group.channels):
                 new_channel = exd_api.StructureResult.Channel()
@@ -97,11 +101,9 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
                 new_channel.data_type = self.__get_channel_data_type(channel)
                 new_channel.unit_string = channel.unit
                 if channel.comment is not None and "" != channel.comment:
-                    new_channel.attributes.variables["description"].string_array.values.append(
-                        channel.comment)
+                    new_channel.attributes.variables["description"].string_array.values.append(channel.comment)
                 if 0 == channel_index:
-                    new_channel.attributes.variables["independent"].long_array.values.append(
-                        1)
+                    new_channel.attributes.variables["independent"].long_array.values.append(1)
                 new_group.channels.append(new_channel)
 
             rv.groups.append(new_group)
@@ -120,15 +122,15 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
         mdf4 = self.__get_mdf(values_request.handle)
 
         if values_request.group_id < 0 or values_request.group_id >= len(mdf4.groups):
-            context.abort(grpc.StatusCode.INVALID_ARGUMENT,
-                          f"Invalid group id {values_request.group_id}!")
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Invalid group id {values_request.group_id}!")
 
         group = mdf4.groups[values_request.group_id]
 
         nr_of_rows = group.channel_group.cycles_nr
         if values_request.start > nr_of_rows:
-            context.abort(grpc.StatusCode.INVALID_ARGUMENT,
-                          f"Channel start index {values_request.start} out of range!")
+            context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT, f"Channel start index {values_request.start} out of range!"
+            )
 
         end_index = values_request.start + values_request.limit
         if end_index >= nr_of_rows:
@@ -137,10 +139,8 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
         channels_to_load = []
         for channel_id in values_request.channel_ids:
             if channel_id >= len(group.channels):
-                context.abort(grpc.StatusCode.INVALID_ARGUMENT,
-                              f"Invalid channel id {channel_id}!")
-            channels_to_load.append(
-                (None, values_request.group_id, channel_id))
+                context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Invalid channel id {channel_id}!")
+            channels_to_load.append((None, values_request.group_id, channel_id))
 
         data = mdf4.select(
             channels_to_load,
@@ -156,9 +156,11 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
                 f"Number read {len(data)} does not match requested channel count {
                     len(values_request.channel_ids)} in {mdf4.name.name}!"
             )
-            context.abort(grpc.StatusCode.INVALID_ARGUMENT,
-                          f"Number read {len(data)} does not match requested channel count {
-                              len(values_request.channel_ids)} in {mdf4.name.name}!")
+            context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                f"Number read {len(data)} does not match requested channel count {
+                              len(values_request.channel_ids)} in {mdf4.name.name}!",
+            )
 
         rv = exd_api.ValuesResult(id=values_request.group_id)
         for signal_index, signal in enumerate(data, start=0):
@@ -201,8 +203,7 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
                 new_channel_values.values.string_array.values[:] = section
             elif channel_datatype == ods.DataTypeEnum.DT_BYTESTR:
                 for item in section:
-                    new_channel_values.values.bytestr_array.values.append(
-                        item.tobytes())
+                    new_channel_values.values.bytestr_array.values.append(item.tobytes())
             else:
                 raise NotImplementedError(
                     f"Unknown np datatype {section.dtype} for type {
@@ -222,8 +223,26 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
         :raises grpc.RpcError: Currently not implemented. Only needed for very advanced use.
         :return exd_api.ValuesExResult: Bulk values requested.
         """
-        context.abort(grpc.StatusCode.UNIMPLEMENTED,
-                      "Method not implemented!")
+        context.abort(grpc.StatusCode.UNIMPLEMENTED, "Method not implemented!")
+
+    def __add_file_header(self, header: HeaderBlock | None, attributes: ods.ContextVariables) -> None:
+        if header is None:
+            return
+
+        if header.description is not None:
+            attributes.variables["description"].string_array.values.append(header.description)
+
+        if header._common_properties is not None:
+
+            def add_attributes(prefix, properties):
+                for key, value in properties.items():
+                    entry = f"{prefix}~{key}" if prefix is not None else key
+                    if isinstance(value, dict):
+                        add_attributes(entry, value)
+                    else:
+                        attributes.variables[entry].string_array.values.append(str(value))
+
+            add_attributes(None, header._common_properties)
 
     def __get_channel_data_type(self, channel: Channel) -> ods.DataTypeEnum:
         rv = self.__get_channel_data_type_base(channel)
@@ -231,7 +250,7 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
             rv = self.__get_conversion_data_type(rv, channel.conversion)
         return rv
 
-    def __get_conversion_data_type(self, rv: ods.DataTypeEnum,  conversion: ChannelConversion) -> ods.DataTypeEnum:
+    def __get_conversion_data_type(self, rv: ods.DataTypeEnum, conversion: ChannelConversion) -> ods.DataTypeEnum:
         if conversion is not None:
             if ods.DataTypeEnum.DT_STRING == rv:
                 if 9 == conversion.conversion_type:
@@ -243,8 +262,7 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
                 if conversion.flags & 4 and conversion.referenced_blocks is not None:
                     # Status string flag is set
                     # the actual conversion rule is given in CCBLOCK referenced by default value.
-                    return self.__get_conversion_data_type(rv, conversion.referenced_blocks.get(
-                        'default_addr'))
+                    return self.__get_conversion_data_type(rv, conversion.referenced_blocks.get("default_addr"))
                     # conversion.default_addr
                 return ods.DataTypeEnum.DT_STRING
         return rv
@@ -351,8 +369,7 @@ class ExternalDataReader(ods_external_data_pb2_grpc.ExternalDataReader):
             connection_id = self.__get_id(identifier)
             connection_url = self.__get_path(identifier.url)
             if connection_url not in self.file_map:
-                self.file_map[connection_url] = {
-                    "mdf4": MDF(connection_url), "ref_count": 0}
+                self.file_map[connection_url] = {"mdf4": MDF(connection_url), "ref_count": 0}
             self.file_map[connection_url]["ref_count"] = self.file_map[connection_url]["ref_count"] + 1
             return connection_id
 
