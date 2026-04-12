@@ -15,7 +15,7 @@ jobs:
 
       - name: Extract version number
         run: |
-          VERSION=$(grep -oP '(?<=__version__ = ")[^"]+' __init__.py)
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
