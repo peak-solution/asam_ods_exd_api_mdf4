@@ -2,7 +2,7 @@
 # docker build -t ghcr.io/peak-solution/asam-ods-exd-api-mdf4:latest .
 # docker run --rm -it -v "$(pwd)/data":"$(pwd)/data" -p 50051:50051 ghcr.io/peak-solution/asam-ods-exd-api-mdf4:latest
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 LABEL org.opencontainers.image.source=https://github.com/totonga/asam-ods-exd-api-mdf4
 LABEL org.opencontainers.image.description="ASAM ODS External Data API for MDF4 files (*.mf4)"
 LABEL org.opencontainers.image.licenses=MIT

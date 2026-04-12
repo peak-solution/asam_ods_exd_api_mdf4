@@ -10,12 +10,12 @@ name = "asam-ods-exd-api-mdf4"
 version = "1.0.0"
 description = "ASAM ODS EXD API implementation to read external data from MDF4 files."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = "MIT"
 authors = [{name = "peak-solution"}]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
     "asammdf>=7.0.0",
@@ -59,7 +59,7 @@ max-line-length = 119
 exclude = [".venv", "__pycache__", "build", "*.egg-info"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
