@@ -1,49 +1,49 @@
 {
-    "name": "Jupyter Dev Container",
-    "image": "mcr.microsoft.com/vscode/devcontainers/python:3.12",
+    "name": "MDF4 EXD API Dev Container",
+    "image": "mcr.microsoft.com/devcontainers/python:3.14-bookworm",
     "features": {
-        "docker-in-docker": "latest"
+        "docker-in-docker": {
+            "version": "latest",
+            "moby": true,
+            "dockerDashComposeVersion": "v1"
+        }
     },
     "customizations": {
         "vscode": {
             "extensions": [
-                "editorconfig.editorconfig",
-                "github.vscode-pull-request-github",
-                "github.vscode-github-actions",
-                "ms-azuretools.vscode-docker",
-                "ms-toolsai.python-ds-extension-pack",
                 "ms-python.python",
                 "ms-python.vscode-pylance",
-                "ms-python.flake8",
+                "ms-python.debugpy",
                 "ms-python.black-formatter",
+                "charliermarsh.ruff",
+                "ms-vscode.makefile-tools",
+                "github.copilot",
+                "github.copilot-chat",
                 "ms-python.isort",
-                "ms-python.pylint",
-                "ms-vsliveshare.vsliveshare",
-                "ryanluker.vscode-coverage-gutters",
-                "streetsidesoftware.code-spell-checker",
-                "ms-vscode.live-server",
-                "GitHub.copilot"
+                "ms-python.mypy-type-checker",
+                "streetsidesoftware.code-spell-checker"
             ],
             "settings": {
-                "python.defaultInterpreterPath": "/usr/local/bin/python",
-                "black-formatter.path": [
-                    "/usr/local/py-utils/bin/black"
-                ],
-                "pylint.path": [
-                    "/usr/local/py-utils/bin/pylint"
-                ],
-                "flake8.path": [
-                    "/usr/local/py-utils/bin/flake8"
-                ],
-                "isort.path": [
-                    "/usr/local/py-utils/bin/isort"
-                ],
-                "terminal.integrated.shell.linux": "/bin/bash"
+                "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+                "python.terminal.activateEnvironment": true,
+                "python.formatting.provider": "black",
+                "python.linting.enabled": true,
+                "python.linting.flake8Enabled": true,
+                "python.linting.pylintEnabled": true,
+                "python.linting.mypyEnabled": true,
+                "[python]": {
+                    "editor.formatOnSave": true,
+                    "editor.codeActionsOnSave": {
+                        "source.organizeImports": "explicit"
+                    }
+                },
+                "terminal.integrated.defaultProfile.linux": "bash"
             }
         }
     },
-    "postCreateCommand": "python -m pip install --upgrade pip && pip install coverage isort jupyterlab odsbox[exd-data] grpcio grpcio-tools pandas asammdf",
+    "postCreateCommand": "pip install --upgrade pip && pip install uv && uv sync --extra dev",
     "forwardPorts": [
+        50051,
         8888
     ],
     "remoteUser": "vscode"

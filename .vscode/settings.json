@@ -16,7 +16,11 @@
         "source.organizeImports": "always",
     },
     "cSpell.words": [
-        "dtypes"
+        "BYTESTR",
+        "CCBLOCK",
+        "DCOMPLEX",
+        "dtypes",
+        "tobytes"
     ],
     "python.testing.unittestArgs": [
         "-v",

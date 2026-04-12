@@ -1,16 +1,16 @@
-from datetime import datetime
 import os
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
+
 import grpc
-from google.protobuf.json_format import MessageToJson
-
-from tests.mock_servicer_context import MockServicerContext
 from asammdf import MDF
-from external_data_reader import ExternalDataReader
-import ods_external_data_pb2 as exd_api
+from google.protobuf.json_format import MessageToJson
+from ods_exd_api_box import ExternalDataReader, FileHandlerRegistry, exd_api
 
+from external_data_file import ExternalDataFile
+from tests.mock_servicer_context import MockServicerContext
 
 # pylint: disable=E1101
 
@@ -18,6 +18,7 @@ import ods_external_data_pb2 as exd_api
 class TestExternalDataReader(unittest.TestCase):
 
     def setUp(self):
+        FileHandlerRegistry.register(file_type_name="test", factory=ExternalDataFile)
         self.service = ExternalDataReader()
         self.mock_context = MockServicerContext()
 
@@ -29,8 +30,7 @@ class TestExternalDataReader(unittest.TestCase):
                 mdf4.start_time = datetime.now()
                 mdf4.save(file_path, compression=2, overwrite=True)
 
-            identifier = exd_api.Identifier(
-                url=Path(file_path).resolve().as_uri(), parameters="")
+            identifier = exd_api.Identifier(url=Path(file_path).resolve().as_uri(), parameters="")
             try:
                 handle = self.service.Open(identifier, None)
                 self.assertIsNotNone(handle.uuid)
@@ -38,16 +38,14 @@ class TestExternalDataReader(unittest.TestCase):
                 self.service.Close(handle, None)
 
     def test_open_non_existing_file(self):
-        identifier = exd_api.Identifier(
-            url="file:///non_existing_file.mf4", parameters="")
+        identifier = exd_api.Identifier(url="file:///non_existing_file.mf4", parameters="")
         with self.assertRaises(grpc.RpcError) as _:
             self.service.Open(identifier, self.mock_context)
 
         self.assertEqual(self.mock_context.code(), grpc.StatusCode.NOT_FOUND)
 
     def test_simple_example(self):
-        main_file_path = Path.joinpath(
-            Path(__file__).parent.resolve(), "..", "data", "simple.mf4")
+        main_file_path = Path.joinpath(Path(__file__).parent.resolve(), "..", "data", "simple.mf4")
 
         main_file_url = Path(main_file_path).absolute().resolve().as_uri()
 
@@ -88,8 +86,7 @@ class TestExternalDataReader(unittest.TestCase):
                 mdf4.start_time = datetime.now()
                 mdf4.save(file_path, compression=2, overwrite=True)
 
-            identifier = exd_api.Identifier(
-                url=Path(file_path).resolve().as_uri(), parameters="")
+            identifier = exd_api.Identifier(url=Path(file_path).resolve().as_uri(), parameters="")
             handle1 = self.service.Open(identifier, None)
             self.assertIsNotNone(handle1.uuid)
 
@@ -115,23 +112,19 @@ class TestExternalDataReader(unittest.TestCase):
                 mdf4.header.subject = "my_subject"
                 mdf4.save(file_path, compression=2, overwrite=True)
 
-            identifier = exd_api.Identifier(
-                url=Path(file_path).resolve().as_uri(), parameters="")
+            identifier = exd_api.Identifier(url=Path(file_path).resolve().as_uri(), parameters="")
             handle1 = self.service.Open(identifier, None)
             try:
-                file_content = self.service.GetStructure(
-                    exd_api.StructureRequest(handle=handle1), None)
+                file_content = self.service.GetStructure(exd_api.StructureRequest(handle=handle1), None)
                 file_attributes = file_content.attributes.variables
 
                 attribute = file_attributes.get("start_time")
                 self.assertIsNotNone(attribute)
-                self.assertEqual(
-                    attribute.string_array.values[0], "20210101000000000000")
+                self.assertEqual(attribute.string_array.values[0], "20210101000000000000")
 
                 attribute = file_attributes.get("description")
                 self.assertIsNotNone(attribute)
-                self.assertEqual(
-                    attribute.string_array.values[0], "my_comment")
+                self.assertEqual(attribute.string_array.values[0], "my_comment")
 
                 attribute = file_attributes.get("author")
                 self.assertIsNotNone(attribute)
@@ -139,18 +132,15 @@ class TestExternalDataReader(unittest.TestCase):
 
                 attribute = file_attributes.get("department")
                 self.assertIsNotNone(attribute)
-                self.assertEqual(
-                    attribute.string_array.values[0], "my_department")
+                self.assertEqual(attribute.string_array.values[0], "my_department")
 
                 attribute = file_attributes.get("project")
                 self.assertIsNotNone(attribute)
-                self.assertEqual(
-                    attribute.string_array.values[0], "my_project")
+                self.assertEqual(attribute.string_array.values[0], "my_project")
 
                 attribute = file_attributes.get("subject")
                 self.assertIsNotNone(attribute)
-                self.assertEqual(
-                    attribute.string_array.values[0], "my_subject")
+                self.assertEqual(attribute.string_array.values[0], "my_subject")
 
             finally:
                 self.service.Close(handle1, None)
@@ -175,23 +165,19 @@ class TestExternalDataReader(unittest.TestCase):
 </HDcomment>"""
                 mdf4.save(file_path, compression=2, overwrite=True)
 
-            identifier = exd_api.Identifier(
-                url=Path(file_path).resolve().as_uri(), parameters="")
+            identifier = exd_api.Identifier(url=Path(file_path).resolve().as_uri(), parameters="")
             handle1 = self.service.Open(identifier, None)
             try:
-                file_content = self.service.GetStructure(
-                    exd_api.StructureRequest(handle=handle1), None)
+                file_content = self.service.GetStructure(exd_api.StructureRequest(handle=handle1), None)
                 file_attributes = file_content.attributes.variables
 
                 attribute = file_attributes.get("start_time")
                 self.assertIsNotNone(attribute)
-                self.assertEqual(
-                    attribute.string_array.values[0], "20210101000000000000")
+                self.assertEqual(attribute.string_array.values[0], "20210101000000000000")
 
                 attribute = file_attributes.get("description")
                 self.assertIsNotNone(attribute)
-                self.assertEqual(
-                    attribute.string_array.values[0], "my_description")
+                self.assertEqual(attribute.string_array.values[0], "my_description")
 
                 attribute = file_attributes.get("prop1")
                 self.assertIsNotNone(attribute)
@@ -217,8 +203,7 @@ class TestExternalDataReader(unittest.TestCase):
                 self.service.Close(handle1, None)
 
     def test_measurement_begin(self):
-        main_file_path = Path.joinpath(
-            Path(__file__).parent.resolve(), "..", "data", "simple.mf4")
+        main_file_path = Path.joinpath(Path(__file__).parent.resolve(), "..", "data", "simple.mf4")
 
         main_file_url = Path(main_file_path).absolute().resolve().as_uri()
 
@@ -235,13 +220,11 @@ class TestExternalDataReader(unittest.TestCase):
 
             attribute = file_content.attributes.variables.get("start_time")
             self.assertIsNotNone(attribute)
-            self.assertEqual(
-                attribute.string_array.values[0], "20230606202225335777")
+            self.assertEqual(attribute.string_array.values[0], "20230606202225335777")
 
             for group in file_content.groups:
                 attribute = group.attributes.variables.get("measurement_begin")
                 self.assertIsNotNone(attribute)
-                self.assertEqual(
-                    attribute.string_array.values[0], "20230606202225335777")
+                self.assertEqual(attribute.string_array.values[0], "20230606202225335777")
         finally:
             main_external_data_reader.Close(main_exd_api_handle, None)
