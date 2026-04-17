@@ -16,7 +16,6 @@ from tests.mock_servicer_context import MockServicerContext
 
 
 class TestExternalDataReader(unittest.TestCase):
-
     def setUp(self):
         FileHandlerRegistry.register(file_type_name="test", factory=ExternalDataFile)
         self.service = ExternalDataReader()
@@ -55,7 +54,6 @@ class TestExternalDataReader(unittest.TestCase):
             exd_api.Identifier(url=main_file_url, parameters=""), None
         )
         try:
-
             main_exd_api_structure = main_external_data_reader.GetStructure(
                 exd_api.StructureRequest(handle=main_exd_api_handle), None
             )
@@ -213,7 +211,6 @@ class TestExternalDataReader(unittest.TestCase):
             exd_api.Identifier(url=main_file_url, parameters=""), None
         )
         try:
-
             file_content = main_external_data_reader.GetStructure(
                 exd_api.StructureRequest(handle=main_exd_api_handle), None
             )

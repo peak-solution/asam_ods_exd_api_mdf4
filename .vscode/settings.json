@@ -1,19 +1,11 @@
 {
     "editor.formatOnSave": true,
     "editor.formatOnPaste": true,
+    "editor.defaultFormatter": "charliermarsh.ruff",
     "files.trimTrailingWhitespace": true,
     "files.autoSave": "onFocusChange",
-    "flake8.args": [
-        "--max-line-length=119"
-    ],
-    "black-formatter.args": [
-        "--line-length=119"
-    ],
-    "pylint.args": [
-        "--max-line-length=119"
-    ],
     "editor.codeActionsOnSave": {
-        "source.organizeImports": "always",
+        "source.organizeImports": "always"
     },
     "cSpell.words": [
         "BYTESTR",

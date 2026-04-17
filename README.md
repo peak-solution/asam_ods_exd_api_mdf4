@@ -24,16 +24,7 @@ It is built on the [ods-exd-api-box](https://pypi.org/project/ods-exd-api-box/) 
 Install [uv](https://docs.astral.sh/uv/) and then install the project with dev dependencies:
 
 ```
-uv sync --extra dev
-```
-
-Alternatively, using plain pip:
-
-```
-python -m venv .venv
-.venv\Scripts\activate   # Windows
-# source .venv/bin/activate  # Linux/macOS
-pip install ".[dev]"
+uv sync --group dev
 ```
 
 ### Run Tests
@@ -44,11 +35,13 @@ uv run python -m unittest discover tests
 
 ### Code Quality
 
+```bash
+uv sync --group dev                    # 1. Install all dependencies
+uv run ruff format .                   # 2. Format code
+uv run ruff check --fix .              # 3. Fix lint violations
+uv run mypy external_data_file.py      # 4. Type check
+uv run python -m unittest discover tests  # 5. Run tests
 ```
-uv run mypy external_data_file.py
-uv run flake8 external_data_file.py tests
-```
-
 
 ## Docker
 
