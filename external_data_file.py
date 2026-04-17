@@ -41,7 +41,9 @@ class ExternalDataFile(ExdFileInterface):
 
         for group_index, group in enumerate(mdf4.groups):
             new_group = exd_api.StructureResult.Group()
-            new_group.name = group.channel_group.acq_name if group.channel_group.acq_name is not None else f"Group {group_index}"  # type: ignore
+            new_group.name = (
+                group.channel_group.acq_name if group.channel_group.acq_name is not None else f"Group {group_index}"
+            )  # type: ignore
             new_group.id = group_index
             new_group.total_number_of_channels = len(group.channels)
             new_group.number_of_rows = group.channel_group.cycles_nr
@@ -176,7 +178,9 @@ class ExternalDataFile(ExdFileInterface):
             rv = self.__get_conversion_data_type(rv, channel.conversion)
         return rv
 
-    def __get_conversion_data_type(self, rv: ods.DataTypeEnum, conversion: ChannelConversion | None) -> ods.DataTypeEnum:
+    def __get_conversion_data_type(
+        self, rv: ods.DataTypeEnum, conversion: ChannelConversion | None
+    ) -> ods.DataTypeEnum:
         if conversion is not None:
             if ods.DataTypeEnum.DT_STRING == rv:
                 if 9 == conversion.conversion_type:
@@ -269,7 +273,6 @@ class ExternalDataFile(ExdFileInterface):
 
 
 if __name__ == "__main__":
-
     from ods_exd_api_box import serve_plugin
 
     serve_plugin(file_type_name="MDF4", file_type_factory=ExternalDataFile.create, file_type_file_patterns=["*.mf4"])

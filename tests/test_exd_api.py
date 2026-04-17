@@ -49,7 +49,8 @@ class TestStringMethods(unittest.TestCase):
         handle = service.Open(exd_api.Identifier(url=self._get_example_file_path("simple.mf4"), parameters=""), None)
         try:
             values = service.GetValues(
-                exd_api.ValuesRequest(handle=handle, group_id=0, channel_ids=[0, 1, 2, 3], start=0, limit=4), None  #
+                exd_api.ValuesRequest(handle=handle, group_id=0, channel_ids=[0, 1, 2, 3], start=0, limit=4),
+                None,  #
             )
             self.assertEqual(values.id, 0)
             self.assertEqual(len(values.channels), 4)

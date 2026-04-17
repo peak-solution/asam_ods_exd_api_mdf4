@@ -116,7 +116,6 @@ class TestExampleFiles(unittest.TestCase):
                         vals = values_channel.values.boolean_array.values
                         self.assertEqual(len(vals), group.number_of_rows)
                     else:
-                        self.assertFalse(True, f"Unknown type {
-                                         values_channel.values.data_type}")
+                        self.assertFalse(True, f"Unknown type {values_channel.values.data_type}")
         finally:
             service.Close(handle, None)

@@ -32,4 +32,5 @@ dmypy.json
 *.swo
 *~
 .DS_Store
+.*_cache/
 
