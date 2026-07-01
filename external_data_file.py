@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, override
 
 from asammdf import MDF
@@ -20,25 +21,32 @@ class ExternalDataFile(ExdFileInterface):
 
     @override
     def __init__(self, file_path: str, parameters: str = ""):
+        self._log = logging.getLogger(__name__)
+
+        self._log.debug("Initializing ExternalDataFile with path: %s and parameters: %s", file_path, parameters)
         self.file_path = file_path
         self.parameters = parameters
         self.mdf4 = MDF(file_path)
+        self._log.debug("ExternalDataFile initialized")
 
     @override
     def close(self) -> None:
         """Close the external data file."""
         self.mdf4.close()
+        self._log.debug("ExternalDataFile closed")
 
     @override
     def fill_structure(self, structure: exd_api.StructureResult) -> None:
         """Fill the structure of the external data file."""
         mdf4 = self.mdf4
+        self._log.debug("Building structure for file: %s", self.file_path)
 
         start_time_ods = mdf4.start_time.strftime("%Y%m%d%H%M%S%f")
 
         structure.attributes.variables["start_time"].string_array.values.append(start_time_ods)
         self.__add_file_header(mdf4.header, structure.attributes)  # type: ignore
 
+        self._log.debug("Found %d groups in MDF", len(mdf4.groups))
         for group_index, group in enumerate(mdf4.groups):
             new_group = exd_api.StructureResult.Group()
             new_group.name = (
@@ -50,24 +58,46 @@ class ExternalDataFile(ExdFileInterface):
             new_group.attributes.variables["description"].string_array.values.append(group.channel_group.comment)
             new_group.attributes.variables["measurement_begin"].string_array.values.append(start_time_ods)
 
+            independent_added = False
             for channel_index, channel in enumerate(group.channels):
                 new_channel = exd_api.StructureResult.Channel()
                 new_channel.name = channel.name
                 new_channel.id = channel_index
                 new_channel.data_type = self.__get_channel_data_type(channel)  # type: ignore
                 new_channel.unit_string = channel.unit
-                if channel.comment is not None and "" != channel.comment:
+                if channel.comment is not None and "" != channel.comment: # type: ignore
                     new_channel.attributes.variables["description"].string_array.values.append(channel.comment)
-                if 0 == channel_index:
-                    new_channel.attributes.variables["independent"].long_array.values.append(1)
+                if 2 == channel.channel_type: # MASTER channel
+                    if not independent_added:
+                        new_channel.attributes.variables["independent"].long_array.values.append(1)
+                        independent_added = True
+                    else:
+                        self._log.warning(
+                            "Group %s has more than one master channel. Only the first will be marked as independent.",
+                            new_group.name,
+                        )
                 new_group.channels.append(new_channel)
 
             structure.groups.append(new_group)
+            self._log.debug(
+                "Added group id=%d name=%s channels=%d rows=%d",
+                new_group.id,
+                new_group.name,
+                len(new_group.channels),
+                new_group.number_of_rows,
+            )
 
     @override
     def get_values(self, request: exd_api.ValuesRequest) -> exd_api.ValuesResult:
         """Get values from the external data file."""
         mdf4 = self.mdf4
+        self._log.debug(
+            "GetValues request group_id=%d start=%d limit=%d channel_count=%d",
+            request.group_id,
+            request.start,
+            request.limit,
+            len(request.channel_ids),
+        )
 
         if request.group_id < 0 or request.group_id >= len(mdf4.groups):
             raise ValueError(f"Invalid group id {request.group_id}!")
@@ -81,6 +111,7 @@ class ExternalDataFile(ExdFileInterface):
         end_index = request.start + request.limit
         if end_index >= nr_of_rows:
             end_index = nr_of_rows
+        self._log.debug("Reading rows in range [%d, %d) out of %d", request.start, end_index, nr_of_rows)
 
         channels_to_load = []
         for channel_id in request.channel_ids:
@@ -151,6 +182,7 @@ class ExternalDataFile(ExdFileInterface):
 
             rv.channels.append(new_channel_values)
 
+        self._log.debug("GetValues returning %d channels", len(rv.channels))
         return rv
 
     def __add_file_header(self, header: HeaderBlock | None, attributes: Any) -> None:

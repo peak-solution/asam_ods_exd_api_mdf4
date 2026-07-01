@@ -29,6 +29,18 @@ class TestExampleFiles(unittest.TestCase):
         finally:
             service.Close(handle, self.mock_context)
 
+    def __is_independent_channel(self, channel: exd_api.StructureResult.Channel) -> bool:
+        if not channel.attributes:
+            return False
+        if not channel.attributes.variables:
+            return False
+        independent_attr: ods.ContextVariables.VariablesEntry | None = channel.attributes.variables.get("independent")
+        if not independent_attr:
+            return False
+
+        assert independent_attr.HasField("long_array"), "Independent attribute should be a long_array"
+        return independent_attr.long_array.values[0] == 1
+
     def test_files(self):
         """Parameterized test over all example files using unittest subTest."""
         example_files_folder = pathlib.Path.joinpath(pathlib.Path(__file__).parent.resolve(), "..", "data", "examples")
@@ -62,8 +74,13 @@ class TestExampleFiles(unittest.TestCase):
         try:
             for group in structure.groups:
                 channel_ids: list[int] = []
+                independent_count = 0
                 for channel in group.channels:
                     channel_ids.append(channel.id)
+                    if self.__is_independent_channel(channel):
+                        independent_count += 1
+                self.assertLessEqual(independent_count, 1, f"Group {group.name} has more than one independent channel")
+
                 values = service.GetValues(
                     exd_api.ValuesRequest(
                         handle=handle,
