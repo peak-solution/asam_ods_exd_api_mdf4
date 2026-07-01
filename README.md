@@ -33,6 +33,16 @@ uv sync --group dev
 uv run python -m unittest discover tests
 ```
 
+### Run Plugin Locally
+
+Use an explicit IPv4 bind address on Windows to avoid IPv6 bind issues:
+
+```bash
+uv run asam-ods-exd-api-mdf4 --bind-address 127.0.0.1 --port 50051
+```
+
+Stop the server with `Ctrl+C`. A non-zero exit code after interruption is expected.
+
 ### Code Quality
 
 ```bash

@@ -36,10 +36,16 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/peak-solution/asam_ods_exd_api_mdf4"
 
+[project.scripts]
+asam-ods-exd-api-mdf4 = "external_data_file:main"
+
 [tool.ruff]
 line-length = 119
 target-version = "py314"
 extend-exclude = ["*.ipynb"]
+
+[tool.ruff.format]
+docstring-code-format = true
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]

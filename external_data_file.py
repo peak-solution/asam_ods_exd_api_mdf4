@@ -307,7 +307,12 @@ class ExternalDataFile(ExdFileInterface):
         return ods.DataTypeEnum.DT_DOUBLE
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Run plugin server entry point."""
     from ods_exd_api_box import serve_plugin
 
     serve_plugin(file_type_name="MDF4", file_type_factory=ExternalDataFile.create, file_type_file_patterns=["*.mf4"])
+
+
+if __name__ == "__main__":
+    main()
