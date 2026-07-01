@@ -7,18 +7,26 @@ py-modules = ["external_data_file"]
 
 [project]
 name = "asam-ods-exd-api-mdf4"
-version = "1.2.0"
+version = "1.2.1"
 description = "ASAM ODS EXD API implementation to read external data from MDF4 files."
 readme = "README.md"
 requires-python = ">=3.14"
 license = "MIT"
+license-files = ["LICENSE"]
 authors = [{name = "peak-solution"}]
+keywords = ["ASAM", "ODS", "EXD-API", "MDF4", "measurement data"]
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "asammdf>=8.8.20",
+    "asammdf>=8.8.20,<9.0.0",
     "ods-exd-api-box>=1.5.0,<2.0.0",
 ]
 
@@ -35,6 +43,8 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/peak-solution/asam_ods_exd_api_mdf4"
+Repository = "https://github.com/peak-solution/asam_ods_exd_api_mdf4"
+Issues = "https://github.com/peak-solution/asam_ods_exd_api_mdf4/issues"
 
 [project.scripts]
 asam-ods-exd-api-mdf4 = "external_data_file:main"
