@@ -1,5 +1,10 @@
 # ASAM ODS EXD-API MDF4 plugin
 
+[![Build](https://github.com/peak-solution/asam_ods_exd_api_mdf4/actions/workflows/docker-build.yml/badge.svg)](https://github.com/peak-solution/asam_ods_exd_api_mdf4/actions/workflows/docker-build.yml)
+[![PyPI version](https://img.shields.io/pypi/v/asam-ods-exd-api-mdf4.svg)](https://pypi.org/project/asam-ods-exd-api-mdf4/)
+[![Python versions](https://img.shields.io/pypi/pyversions/asam-ods-exd-api-mdf4.svg)](https://pypi.org/project/asam-ods-exd-api-mdf4/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 This repository contains a [ASAM ODS EXD-API](https://www.asam.net/standards/detail/ods/) plugin that uses [asammdf](https://pypi.org/project/asammdf/) to read the [ASAM MDF4](https://www.asam.net/standards/detail/mdf/wiki/) files.
 
 It is built on the [ods-exd-api-box](https://pypi.org/project/ods-exd-api-box/) helper library which provides the gRPC server infrastructure and proto stubs.
@@ -42,6 +47,14 @@ uv run asam-ods-exd-api-mdf4 --bind-address 127.0.0.1 --port 50051
 ```
 
 Stop the server with `Ctrl+C`. A non-zero exit code after interruption is expected.
+
+### Run Plugin With uvx
+
+Run the latest published package without installing it into the current project environment:
+
+```bash
+uvx asam-ods-exd-api-mdf4 --bind-address 127.0.0.1 --port 50051
+```
 
 ### Code Quality
 
