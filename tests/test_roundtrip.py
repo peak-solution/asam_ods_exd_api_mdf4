@@ -25,6 +25,7 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 from asammdf import MDF, Signal
@@ -75,14 +76,19 @@ class TestRoundtrip(unittest.TestCase):
         return self.service.Open(exd_api.Identifier(url=_uri(path), parameters=""), None)
 
     def _structure(self, handle) -> exd_api.StructureResult:
-        return self.service.GetStructure(exd_api.StructureRequest(handle=handle), None)
+        return cast(exd_api.StructureResult, self.service.GetStructure(exd_api.StructureRequest(handle=handle), None))
 
     def _values(
         self, handle, group_id: int, channel_ids: list, start: int = 0, limit: int = 9999, context=None
     ) -> exd_api.ValuesResult:
-        return self.service.GetValues(
-            exd_api.ValuesRequest(handle=handle, group_id=group_id, channel_ids=channel_ids, start=start, limit=limit),
-            context,
+        return cast(
+            exd_api.ValuesResult,
+            self.service.GetValues(
+                exd_api.ValuesRequest(
+                    handle=handle, group_id=group_id, channel_ids=channel_ids, start=start, limit=limit
+                ),
+                context,
+            ),
         )
 
     def _assert_floats(self, actual, expected, places: int = 5):

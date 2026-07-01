@@ -7,7 +7,7 @@ py-modules = ["external_data_file"]
 
 [project]
 name = "asam-ods-exd-api-mdf4"
-version = "1.0.0"
+version = "1.1.0"
 description = "ASAM ODS EXD API implementation to read external data from MDF4 files."
 readme = "README.md"
 requires-python = ">=3.14"
@@ -18,8 +18,8 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "asammdf>=7.0.0",
-    "ods-exd-api-box>=1.3.0,<2.0.0",
+    "asammdf>=8.8.20",
+    "ods-exd-api-box>=1.5.0,<2.0.0",
 ]
 
 [dependency-groups]
@@ -27,16 +27,25 @@ dev = [
     "coverage>=7.0",
     "jupyterlab>=4.0",
     "mypy>=1.5",
+    "pytest>=9.1.1",
     "ruff>=0.1.0",
+    "types-grpcio>=1.0.0.20260614",
+    "types-protobuf>=7.34.1.20260518",
 ]
 
 [project.urls]
 Homepage = "https://github.com/peak-solution/asam_ods_exd_api_mdf4"
 
+[project.scripts]
+asam-ods-exd-api-mdf4 = "external_data_file:main"
+
 [tool.ruff]
 line-length = 119
 target-version = "py314"
 extend-exclude = ["*.ipynb"]
+
+[tool.ruff.format]
+docstring-code-format = true
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
@@ -49,9 +58,6 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 no_implicit_optional = true
 exclude = '(^|/)(build|\.venv|\.mypy_cache)(/|$)'
-
-[[tool.mypy.overrides]]
-ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = "asammdf.*"
