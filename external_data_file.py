@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, override
+from typing import Any, cast, override
 
 from asammdf import MDF
 from asammdf.blocks.v4_blocks import Channel, ChannelConversion, HeaderBlock
@@ -48,26 +48,29 @@ class ExternalDataFile(ExdFileInterface):
 
         self._log.debug("Found %d groups in MDF", len(mdf4.groups))
         for group_index, group in enumerate(mdf4.groups):
+            group_any = cast(Any, group)
             new_group = exd_api.StructureResult.Group()
             new_group.name = (
-                group.channel_group.acq_name if group.channel_group.acq_name is not None else f"Group {group_index}"
+                group_any.channel_group.acq_name
+                if group_any.channel_group.acq_name is not None
+                else f"Group {group_index}"
             )  # type: ignore
             new_group.id = group_index
-            new_group.total_number_of_channels = len(group.channels)
-            new_group.number_of_rows = group.channel_group.cycles_nr
-            new_group.attributes.variables["description"].string_array.values.append(group.channel_group.comment)
+            new_group.total_number_of_channels = len(group_any.channels)
+            new_group.number_of_rows = group_any.channel_group.cycles_nr
+            new_group.attributes.variables["description"].string_array.values.append(group_any.channel_group.comment)
             new_group.attributes.variables["measurement_begin"].string_array.values.append(start_time_ods)
 
             independent_added = False
-            for channel_index, channel in enumerate(group.channels):
+            for channel_index, channel in enumerate(group_any.channels):
                 new_channel = exd_api.StructureResult.Channel()
                 new_channel.name = channel.name
                 new_channel.id = channel_index
                 new_channel.data_type = self.__get_channel_data_type(channel)  # type: ignore
                 new_channel.unit_string = channel.unit
-                if channel.comment is not None and "" != channel.comment: # type: ignore
+                if channel.comment is not None and "" != channel.comment:  # type: ignore
                     new_channel.attributes.variables["description"].string_array.values.append(channel.comment)
-                if 2 == channel.channel_type: # MASTER channel
+                if 2 == channel.channel_type:  # MASTER channel
                     if not independent_added:
                         new_channel.attributes.variables["independent"].long_array.values.append(1)
                         independent_added = True

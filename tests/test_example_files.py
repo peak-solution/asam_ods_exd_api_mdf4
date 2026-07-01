@@ -34,7 +34,9 @@ class TestExampleFiles(unittest.TestCase):
             return False
         if not channel.attributes.variables:
             return False
-        independent_attr: ods.ContextVariables.VariablesEntry | None = channel.attributes.variables.get("independent")
+        independent_attr: ods.ContextVariables.ContextVariableValue | None = channel.attributes.variables.get(
+            "independent"
+        )
         if not independent_attr:
             return False
 
