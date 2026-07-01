@@ -7,6 +7,7 @@ from glob import glob
 from ods_exd_api_box import ExternalDataReader, FileHandlerRegistry, exd_api, ods
 
 from external_data_file import ExternalDataFile
+from tests.mock_servicer_context import MockServicerContext
 
 # pylint: disable=E1101
 
@@ -17,31 +18,29 @@ class TestExampleFiles(unittest.TestCase):
     def setUp(self):
         """Register ExternalDataFile handler before each test."""
         FileHandlerRegistry.register(file_type_name="test", factory=ExternalDataFile)
+        self.mock_context = MockServicerContext()
 
-    def __load_structure(self, example_file_uri):
+    def __load_structure(self, example_file_uri: str):
         service = ExternalDataReader()
-        handle = service.Open(exd_api.Identifier(url=example_file_uri, parameters=""), None)
+        handle = service.Open(exd_api.Identifier(url=example_file_uri, parameters=""), self.mock_context)
         try:
-            structure = service.GetStructure(exd_api.StructureRequest(handle=handle), None)
+            structure = service.GetStructure(exd_api.StructureRequest(handle=handle), self.mock_context)
             return structure
         finally:
-            service.Close(handle, None)
+            service.Close(handle, self.mock_context)
 
     def test_files(self):
-        """test loops over all files and checks if values do match info in structure"""
+        """Parameterized test over all example files using unittest subTest."""
         example_files_folder = pathlib.Path.joinpath(pathlib.Path(__file__).parent.resolve(), "..", "data", "examples")
         example_files = [y for x in os.walk(example_files_folder) for y in glob(os.path.join(x[0], "*.mf4"))]
+        self.assertGreater(len(example_files), 0, "No .mf4 example files found")
 
-        failed = False
         for example_file in example_files:
-            example_file_uri = pathlib.Path(example_file).absolute().resolve().as_uri()
-            try:
+            example_file_path = pathlib.Path(example_file)
+            example_file_uri = example_file_path.absolute().resolve().as_uri()
+            relative_example_file = example_file_path.relative_to(example_files_folder)
+            with self.subTest(example_file=str(relative_example_file)):
                 self.__check_file_including_bulk(example_file_uri)
-            except Exception as e:
-                print(f"FAILED: {e}")
-                failed = True
-
-        self.assertFalse(failed, "At least one file failed")
 
     def test_file(self):
         """Check a single file"""
@@ -50,7 +49,7 @@ class TestExampleFiles(unittest.TestCase):
         example_file_uri = pathlib.Path(example_file).absolute().resolve().as_uri()
         self.__check_file_including_bulk(example_file_uri)
 
-    def __check_file_including_bulk(self, example_file_uri):
+    def __check_file_including_bulk(self, example_file_uri: str):
         print(f"URI: {example_file_uri}")
         self.log.info("Retrieve structure")
         structure = self.__load_structure(example_file_uri)
@@ -59,10 +58,10 @@ class TestExampleFiles(unittest.TestCase):
 
         self.log.info("Check bulk load")
         service = ExternalDataReader()
-        handle = service.Open(exd_api.Identifier(url=example_file_uri, parameters=""), None)
+        handle = service.Open(exd_api.Identifier(url=example_file_uri, parameters=""), self.mock_context)
         try:
             for group in structure.groups:
-                channel_ids = []
+                channel_ids: list[int] = []
                 for channel in group.channels:
                     channel_ids.append(channel.id)
                 values = service.GetValues(
@@ -73,7 +72,7 @@ class TestExampleFiles(unittest.TestCase):
                         limit=group.number_of_rows + 10,
                         channel_ids=channel_ids,
                     ),
-                    None,
+                    self.mock_context,
                 )
                 for values_channel_index, values_channel in enumerate(values.channels):
                     structure_channel = group.channels[values_channel_index]
@@ -118,4 +117,4 @@ class TestExampleFiles(unittest.TestCase):
                     else:
                         self.assertFalse(True, f"Unknown type {values_channel.values.data_type}")
         finally:
-            service.Close(handle, None)
+            service.Close(handle, self.mock_context)
