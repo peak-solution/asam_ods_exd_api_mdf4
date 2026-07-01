@@ -7,7 +7,7 @@ py-modules = ["external_data_file"]
 
 [project]
 name = "asam-ods-exd-api-mdf4"
-version = "1.1.0"
+version = "1.2.0"
 description = "ASAM ODS EXD API implementation to read external data from MDF4 files."
 readme = "README.md"
 requires-python = ">=3.14"
