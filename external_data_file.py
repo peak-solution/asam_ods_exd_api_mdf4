@@ -70,14 +70,17 @@ class ExternalDataFile(ExdFileInterface):
                 new_channel.unit_string = channel.unit
                 if channel.comment is not None and "" != channel.comment:  # type: ignore
                     new_channel.attributes.variables["description"].string_array.values.append(channel.comment)
-                if 2 == channel.channel_type:  # MASTER channel
+                if channel.channel_type in (2, 3):  # MASTER or VIRTUAL_MASTE channel
                     if not independent_added:
                         new_channel.attributes.variables["independent"].long_array.values.append(1)
                         independent_added = True
                     else:
                         self._log.warning(
-                            "Group %s has more than one master channel. Only the first will be marked as independent.",
+                            "Group %s has more than one master channel. Only the first will be marked as independent. "
+                            "'%s' (type=%s) is ignored.",
                             new_group.name,
+                            new_channel.name,
+                            channel.channel_type,
                         )
                 new_group.channels.append(new_channel)
 

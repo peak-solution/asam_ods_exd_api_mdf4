@@ -531,6 +531,35 @@ class TestRoundtrip(unittest.TestCase):
         finally:
             self.service.Close(handle, None)
 
+    def test_virtual_master_channel(self):
+        """A virtual master channel (channel_type=3) must be marked independent and
+        return sample indices [0, 1, 2, ...] as DT_DOUBLE values."""
+        vals = np.array([10.0, 20.0, 30.0], np.float64)
+        sig = Signal(samples=vals, timestamps=[0.5, 1.5, 3.0], name="speed", unit="m/s")
+        with MDF(version="4.10") as mdf:
+            mdf.append([sig], common_timebase=True)
+            mdf.groups[0].channels[0].channel_type = 3  # VIRTUAL_MASTER
+            path = self._save(mdf, "virtual_master.mf4")
+        handle = self._open(path)
+        try:
+            structure = self._structure(handle)
+            grp = structure.groups[0]
+            time_ch = grp.channels[0]
+            self.assertEqual(time_ch.name, "time")
+            self.assertIn("independent", time_ch.attributes.variables)
+            self.assertEqual(time_ch.attributes.variables["independent"].long_array.values[0], 1)
+            self.assertEqual(time_ch.data_type, ods.DataTypeEnum.DT_DOUBLE)
+
+            data_ch = grp.channels[1]
+            self.assertNotIn("independent", data_ch.attributes.variables)
+
+            # Virtual master yields sample indices as doubles
+            result = self._values(handle, 0, [0, 1])
+            self._assert_floats(result.channels[0].values.double_array.values, [0.0, 1.0, 2.0])
+            self._assert_floats(result.channels[1].values.double_array.values, vals.tolist())
+        finally:
+            self.service.Close(handle, None)
+
     # ==================================================================
     # Group metadata
     # ==================================================================
