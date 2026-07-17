@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, cast, override
 
+import numpy as np
 from asammdf import MDF
 from asammdf.blocks.v4_blocks import Channel, ChannelConversion, HeaderBlock
 from ods_exd_api_box import ExdFileInterface, exd_api, ods
@@ -12,6 +13,12 @@ from ods_exd_api_box import ExdFileInterface, exd_api, ods
 
 class ExternalDataFile(ExdFileInterface):
     """Class for handling MDF4 files."""
+
+    # Pre-built decoders for string encodings to avoid recreation on every call
+    _latin1_decoder = np.frompyfunc(lambda b: b.decode("latin-1"), 1, 1)
+    _utf8_decoder = np.frompyfunc(lambda b: b.decode("utf-8"), 1, 1)
+    _utf16le_decoder = np.frompyfunc(lambda b: (b if len(b) % 2 == 0 else b + b"\x00").decode("utf-16-le"), 1, 1)
+    _utf16be_decoder = np.frompyfunc(lambda b: (b if len(b) % 2 == 0 else b + b"\x00").decode("utf-16-be"), 1, 1)
 
     @classmethod
     @override
@@ -177,7 +184,7 @@ class ExternalDataFile(ExdFileInterface):
                     real_values_d.append(complex_value.imag)
                 new_channel_values.values.double_array.values[:] = real_values_d
             elif channel_datatype == ods.DataTypeEnum.DT_STRING:
-                new_channel_values.values.string_array.values[:] = section
+                ExternalDataFile._assign_strings(new_channel_values.values.string_array, section, channel)
             elif channel_datatype == ods.DataTypeEnum.DT_BYTESTR:
                 for item in section:
                     new_channel_values.values.bytestr_array.values.append(item.tobytes())
@@ -190,6 +197,28 @@ class ExternalDataFile(ExdFileInterface):
 
         self._log.debug("GetValues returning %d channels", len(rv.channels))
         return rv
+
+    @staticmethod
+    def _assign_strings(target: ods.StringArray, section: np.ndarray, channel: Any) -> None:
+        if section.dtype.kind == "S":
+            if channel.data_type == 6:
+                # Latin-1 (ISO-8859-1) encoding
+                target.values[:] = ExternalDataFile._latin1_decoder(section).tolist()
+                return
+            elif channel.data_type == 7:
+                # UTF-8 encoding
+                target.values[:] = ExternalDataFile._utf8_decoder(section).tolist()
+                return
+            elif channel.data_type == 8:
+                # UTF-16 little-endian encoding
+                target.values[:] = ExternalDataFile._utf16le_decoder(section).tolist()
+                return
+            elif channel.data_type == 9:
+                # UTF-16 big-endian encoding
+                target.values[:] = ExternalDataFile._utf16be_decoder(section).tolist()
+                return
+
+        target.values[:] = section
 
     def __add_file_header(self, header: HeaderBlock | None, attributes: Any) -> None:
         if header is None:
