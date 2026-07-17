@@ -25,6 +25,7 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import numpy as np
@@ -95,6 +96,15 @@ class TestRoundtrip(unittest.TestCase):
         self.assertEqual(len(actual), len(expected), f"length mismatch: got {len(actual)}, want {len(expected)}")
         for i, (a, e) in enumerate(zip(actual, expected)):
             self.assertAlmostEqual(float(a), float(e), places=places, msg=f"index {i}: {a} != {e}")
+
+    def _decode_string_samples(self, samples: np.ndarray, encoding: str) -> list[str]:
+        decoded = []
+        for item in samples:
+            payload = bytes(item).rstrip(b"\x00")
+            if encoding.startswith("utf-16") and len(payload) % 2 != 0:
+                payload += b"\x00"
+            decoded.append(payload.decode(encoding))
+        return decoded
 
     # ==================================================================
     # Scalar numeric types
@@ -259,6 +269,71 @@ class TestRoundtrip(unittest.TestCase):
             self.assertEqual(ch.data_type, ods.DataTypeEnum.DT_STRING)
             result = self._values(handle, 0, [1])
             self.assertSequenceEqual(list(result.channels[0].values.string_array.values), vals)
+        finally:
+            self.service.Close(handle, None)
+
+    def test_assign_strings_decodes_mdf_string_encodings(self):
+        cases = [
+            (6, "latin-1", ["Grüße", "façade"]),
+            (7, "utf-8", ["Grüße", "αβγ"]),
+            (8, "utf-16-le", ["Grüße", "漢字"]),
+            (9, "utf-16-be", ["Grüße", "漢字"]),
+        ]
+
+        for data_type, encoding, values in cases:
+            with self.subTest(data_type=data_type, encoding=encoding):
+                target = ods.StringArray()
+                section = np.array([value.encode(encoding).rstrip(b"\x00") for value in values])
+                channel = SimpleNamespace(data_type=data_type)
+
+                ExternalDataFile._assign_strings(target, section, channel)
+
+                self.assertSequenceEqual(list(target.values), values)
+
+    def test_string_multiencoding_roundtrip(self):
+        ts = [0.0, 1.0]
+        expected_values = [
+            ["Grüße", "façade"],
+            ["Grüße", "αβγ"],
+            ["Grüße", "漢字"],
+            ["Grüße", "漢字"],
+        ]
+        expected_data_types = [6, 7, 8, 9]
+        encodings = ["latin-1", "utf-8", "utf-16-le", "utf-16-be"]
+        sigs = [
+            Signal(samples=expected_values[0], timestamps=ts, name="latin1", encoding="latin-1"),
+            Signal(samples=expected_values[1], timestamps=ts, name="utf8", encoding="utf-8"),
+            Signal(samples=expected_values[2], timestamps=ts, name="utf16le", encoding="utf-16-le"),
+            Signal(samples=expected_values[3], timestamps=ts, name="utf16be", encoding="utf-16-be"),
+        ]
+        path = self._make_file(sigs, "strings_multi_encoding.mf4")
+
+        with MDF(path) as mdf:
+            channels = mdf.groups[0].channels[1:]
+            self.assertEqual([channel.data_type for channel in channels], expected_data_types)
+
+            signals = mdf.select([(None, 0, channel_id) for channel_id in [1, 2, 3, 4]], raw=False, copy_master=False)
+            for signal, expected, encoding in zip(signals, expected_values, encodings):
+                self.assertEqual(signal.samples.dtype.kind, "S")
+                decoded = []
+                for item in signal.samples:
+                    payload = bytes(item)
+                    if encoding.startswith("utf-16") and len(payload) % 2 != 0:
+                        payload += b"\x00"
+                    decoded.append(payload.decode(encoding))
+                self.assertSequenceEqual(decoded, expected)
+
+        handle = self._open(path)
+        try:
+            channels = self._structure(handle).groups[0].channels
+            self.assertEqual(len(channels), 5)
+            for channel in channels[1:]:
+                self.assertEqual(channel.data_type, ods.DataTypeEnum.DT_STRING)
+
+            result = self._values(handle, 0, [1, 2, 3, 4])
+            self.assertEqual([channel.id for channel in result.channels], [1, 2, 3, 4])
+            for channel_result, expected in zip(result.channels, expected_values):
+                self.assertSequenceEqual(list(channel_result.values.string_array.values), expected)
         finally:
             self.service.Close(handle, None)
 

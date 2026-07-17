@@ -315,3 +315,69 @@ class TestDataTypes(unittest.TestCase):
                 self.assertSequenceEqual(values.channels[1].values.long_array.values, [2, 4])
             finally:
                 service.Close(handle, None)
+
+    def test_string_encodings_get_values(self):
+        with tempfile.TemporaryDirectory() as temporary_directory_name:
+            file_path = os.path.join(temporary_directory_name, "string_encodings_test.mf4")
+
+            with MDF(version="4.10", file_comment="string_encodings_test.mf4") as mdf4:
+                mdf4.start_time = datetime.now()
+
+                timestamps = [0, 1]
+                sigs = [
+                    Signal(
+                        samples=["Grüße", "façade"],
+                        timestamps=timestamps,
+                        comment="latin1 string data",
+                        name="latin1_data",
+                        unit="ns",
+                        encoding="latin-1",
+                    ),
+                    Signal(
+                        samples=["Grüße", "αβγ"],
+                        timestamps=timestamps,
+                        comment="utf8 string data",
+                        name="utf8_data",
+                        unit="ns",
+                        encoding="utf-8",
+                    ),
+                    Signal(
+                        samples=["Grüße", "漢字"],
+                        timestamps=timestamps,
+                        comment="utf16le string data",
+                        name="utf16le_data",
+                        unit="ns",
+                        encoding="utf-16-le",
+                    ),
+                    Signal(
+                        samples=["Grüße", "漢字"],
+                        timestamps=timestamps,
+                        comment="utf16be string data",
+                        name="utf16be_data",
+                        unit="ns",
+                        encoding="utf-16-be",
+                    ),
+                ]
+                mdf4.append(sigs, comment="group_string_encodings", common_timebase=True)
+
+                mdf4.save(file_path, compression=2, overwrite=True)
+
+            service = ExternalDataReader()
+            handle = service.Open(exd_api.Identifier(url=Path(file_path).resolve().as_uri(), parameters=""), None)
+            try:
+                structure = service.GetStructure(exd_api.StructureRequest(handle=handle), None)
+                self.assertEqual(len(structure.groups), 1)
+                self.assertEqual(len(structure.groups[0].channels), 5)
+                for channel in structure.groups[0].channels[1:]:
+                    self.assertEqual(channel.data_type, ods.DataTypeEnum.DT_STRING)
+
+                values = service.GetValues(
+                    exd_api.ValuesRequest(handle=handle, group_id=0, start=0, limit=2, channel_ids=[1, 2, 3, 4]), None
+                )
+                self.assertEqual([channel.id for channel in values.channels], [1, 2, 3, 4])
+                self.assertSequenceEqual(values.channels[0].values.string_array.values, ["Grüße", "façade"])
+                self.assertSequenceEqual(values.channels[1].values.string_array.values, ["Grüße", "αβγ"])
+                self.assertSequenceEqual(values.channels[2].values.string_array.values, ["Grüße", "漢字"])
+                self.assertSequenceEqual(values.channels[3].values.string_array.values, ["Grüße", "漢字"])
+            finally:
+                service.Close(handle, None)

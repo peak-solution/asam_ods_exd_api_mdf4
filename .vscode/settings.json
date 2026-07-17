@@ -12,6 +12,7 @@
         "CCBLOCK",
         "DCOMPLEX",
         "dtypes",
+        "frompyfunc",
         "tobytes"
     ],
     "python.testing.unittestArgs": [
