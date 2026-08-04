@@ -9,6 +9,9 @@ This repository contains a [ASAM ODS EXD-API](https://www.asam.net/standards/det
 
 It is built on the [ods-exd-api-box](https://pypi.org/project/ods-exd-api-box/) helper library which provides the gRPC server infrastructure and proto stubs.
 
+Find more tools supporting your digital transformation in the [Peak Solution Git Repo](https://github.com/peak-solution). 
+
+
 ## Content
 
 ### Implementation
