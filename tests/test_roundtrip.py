@@ -33,7 +33,7 @@ import numpy as np
 from asammdf import MDF, Signal
 from ods_exd_api_box import ExternalDataReader, FileHandlerRegistry, exd_api, ods
 
-from external_data_file import ExternalDataFile
+from asam_ods_exd_api_mdf4 import ExternalDataFile
 
 # pylint: disable=E1101
 

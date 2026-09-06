@@ -9,13 +9,13 @@ This repository contains a [ASAM ODS EXD-API](https://www.asam.net/standards/det
 
 It is built on the [ods-exd-api-box](https://pypi.org/project/ods-exd-api-box/) helper library which provides the gRPC server infrastructure and proto stubs.
 
-Find more tools supporting your digital transformation in the [Peak Solution Git Repo](https://github.com/peak-solution). 
+Find more tools supporting your digital transformation in the [Peak Solution Git Repo](https://github.com/peak-solution).
 
 
 ## Content
 
 ### Implementation
-* [external_data_file.py](external_data_file.py)<br>
+* [src/asam_ods_exd_api_mdf4/external_data_file.py](src/asam_ods_exd_api_mdf4/external_data_file.py)<br>
   Implements the `ExdFileInterface` from `ods-exd-api-box` to access MDF4 files using [asammdf](https://pypi.org/project/asammdf/).
   Also contains the entry point to run the gRPC service.
 
@@ -65,7 +65,7 @@ uvx asam-ods-exd-api-mdf4 --bind-address 127.0.0.1 --port 50051
 uv sync --group dev                    # 1. Install all dependencies
 uv run ruff format .                   # 2. Format code
 uv run ruff check --fix .              # 3. Fix lint violations
-uv run mypy external_data_file.py      # 4. Type check
+uv run mypy src/asam_ods_exd_api_mdf4/external_data_file.py      # 4. Type check
 uv run python -m unittest discover tests  # 5. Run tests
 ```
 
