@@ -9,6 +9,7 @@ import numpy as np
 from asammdf import MDF
 from asammdf.blocks.v4_blocks import Channel, ChannelConversion, HeaderBlock
 from ods_exd_api_box import ExdFileInterface, exd_api, ods
+from ods_exd_api_box.utils import ParamParser
 
 
 class ExternalDataFile(ExdFileInterface):
@@ -26,6 +27,16 @@ class ExternalDataFile(ExdFileInterface):
         """Factory method to create a file handler instance."""
         return cls(file_path, parameters)
 
+    def _get_bool(self, params: dict[str, Any], name: str, default: bool = False) -> bool:
+        val = params.get(name, default)
+        if isinstance(val, bool):
+            return val
+        if isinstance(val, str):
+            return val.strip().lower() in ("true", "1", "yes")
+        if isinstance(val, (int, float)):
+            return val != 0
+        return default
+
     @override
     def __init__(self, file_path: str, parameters: str = ""):
         self._log = logging.getLogger(__name__)
@@ -33,6 +44,11 @@ class ExternalDataFile(ExdFileInterface):
         self._log.debug("Initializing ExternalDataFile with path: %s and parameters: %s", file_path, parameters)
         self.file_path = file_path
         self.parameters = parameters
+        params = ParamParser.parse_params(parameters)
+        self.values_raw: bool = self._get_bool(params, "values_raw", False)
+        self.values_ignore_value2text_conversions: bool = self._get_bool(
+            params, "values_ignore_value2text_conversions", False
+        )
         self.mdf4 = MDF(file_path)
         self._log.debug("ExternalDataFile initialized")
 
@@ -134,8 +150,8 @@ class ExternalDataFile(ExdFileInterface):
 
         data = mdf4.select(
             channels_to_load,
-            raw=False,
-            ignore_value2text_conversions=False,
+            raw=self.values_raw,
+            ignore_value2text_conversions=self.values_ignore_value2text_conversions,
             record_offset=request.start,
             record_count=request.limit,
             copy_master=False,
@@ -166,7 +182,13 @@ class ExternalDataFile(ExdFileInterface):
             elif channel_datatype == ods.DataTypeEnum.DT_LONG:
                 new_channel_values.values.long_array.values[:] = section
             elif channel_datatype == ods.DataTypeEnum.DT_LONGLONG:
-                new_channel_values.values.longlong_array.values[:] = section
+                section_array = np.asarray(section)
+                if section_array.dtype != np.int64:
+                    try:
+                        section_array = section_array.astype(np.int64, copy=False)
+                    except TypeError, ValueError:
+                        pass
+                new_channel_values.values.longlong_array.values[:] = section_array
             elif channel_datatype == ods.DataTypeEnum.DT_FLOAT:
                 new_channel_values.values.float_array.values[:] = section
             elif channel_datatype == ods.DataTypeEnum.DT_DOUBLE:
@@ -218,7 +240,14 @@ class ExternalDataFile(ExdFileInterface):
                 target.values[:] = ExternalDataFile._utf16be_decoder(section).tolist()
                 return
 
-        target.values[:] = section
+        values: list[str] = []
+        for item in np.asarray(section).ravel():
+            if isinstance(item, (bytes, bytearray, np.bytes_)):
+                values.append(item.decode("utf-8") if item else "")
+            else:
+                values.append(str(item))
+
+        target.values[:] = np.asarray(values, dtype=str)
 
     def __add_file_header(self, header: HeaderBlock | None, attributes: Any) -> None:
         if header is None:
@@ -255,7 +284,7 @@ class ExternalDataFile(ExdFileInterface):
                     return ods.DataTypeEnum.DT_DOUBLE
             elif conversion.conversion_type in [1, 2, 3, 4, 5]:
                 return ods.DataTypeEnum.DT_DOUBLE
-            elif conversion.conversion_type in [7, 8]:
+            elif conversion.conversion_type in [7, 8] and not self.values_ignore_value2text_conversions:
                 if conversion.flags & 4 and conversion.referenced_blocks is not None:
                     # Status string flag is set
                     # the actual conversion rule is given in CCBLOCK referenced by default value.

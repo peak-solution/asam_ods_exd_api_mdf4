@@ -9,13 +9,13 @@ This repository contains a [ASAM ODS EXD-API](https://www.asam.net/standards/det
 
 It is built on the [ods-exd-api-box](https://pypi.org/project/ods-exd-api-box/) helper library which provides the gRPC server infrastructure and proto stubs.
 
-Find more tools supporting your digital transformation in the [Peak Solution Git Repo](https://github.com/peak-solution). 
+Find more tools supporting your digital transformation in the [Peak Solution Git Repo](https://github.com/peak-solution).
 
 
 ## Content
 
 ### Implementation
-* [external_data_file.py](external_data_file.py)<br>
+* [src/asam_ods_exd_api_mdf4/external_data_file.py](src/asam_ods_exd_api_mdf4/external_data_file.py)<br>
   Implements the `ExdFileInterface` from `ods-exd-api-box` to access MDF4 files using [asammdf](https://pypi.org/project/asammdf/).
   Also contains the entry point to run the gRPC service.
 
@@ -51,6 +51,36 @@ uv run asam-ods-exd-api-mdf4 --bind-address 127.0.0.1 --port 50051
 
 Stop the server with `Ctrl+C`. A non-zero exit code after interruption is expected.
 
+### Optional Parameters
+
+The file handler accepts optional parameters in the EXD-API `Identifier.parameters` string. Parameters are separated with semicolons, for example:
+
+```python
+parameters="values_raw=True;values_ignore_value2text_conversions=True"
+```
+
+#### `values_raw`
+
+When set to `True`, the plugin reads the raw MDF samples without applying channel conversion rules. This is useful when you want the original stored values instead of the converted engineering values.
+
+Example:
+
+```python
+exd_api.Identifier(url=file_uri, parameters="values_raw=True")
+```
+
+#### `values_ignore_value2text_conversions`
+
+When set to `True`, the plugin ignores value-to-text conversions and returns the underlying numeric or non-string values instead of the text labels created by the conversion tables. This is especially relevant for channels whose MDF conversion rules map numeric values to strings.
+
+Example:
+
+```python
+exd_api.Identifier(url=file_uri, parameters="values_ignore_value2text_conversions=True")
+```
+
+The behavior is covered by the conversion tests in [tests/test_exd_api_string_conversion.py](tests/test_exd_api_string_conversion.py), where the same MDF file is read with and without these parameters to confirm the returned data types and sample values.
+
 ### Run Plugin With uvx
 
 Run the latest published package without installing it into the current project environment:
@@ -65,7 +95,7 @@ uvx asam-ods-exd-api-mdf4 --bind-address 127.0.0.1 --port 50051
 uv sync --group dev                    # 1. Install all dependencies
 uv run ruff format .                   # 2. Format code
 uv run ruff check --fix .              # 3. Fix lint violations
-uv run mypy external_data_file.py      # 4. Type check
+uv run mypy src/asam_ods_exd_api_mdf4/external_data_file.py      # 4. Type check
 uv run python -m unittest discover tests  # 5. Run tests
 ```
 

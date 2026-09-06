@@ -9,7 +9,7 @@ from asammdf import MDF
 from google.protobuf.json_format import MessageToJson
 from ods_exd_api_box import ExternalDataReader, FileHandlerRegistry, exd_api
 
-from external_data_file import ExternalDataFile
+from asam_ods_exd_api_mdf4 import ExternalDataFile
 from tests.mock_servicer_context import MockServicerContext
 
 # pylint: disable=E1101
