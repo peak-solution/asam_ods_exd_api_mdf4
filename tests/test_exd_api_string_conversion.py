@@ -215,6 +215,326 @@ class TestExdApiStringConversion(unittest.TestCase):
         finally:
             service.Close(handle, None)
 
+    def test_values_ignore_value2text_conversions(self):
+        file_uri = self._get_example_file_uri("mdf4_demo_no_arrays.mf4")
+
+        service = ExternalDataReader()
+        handle = service.Open(
+            exd_api.Identifier(url=file_uri, parameters="values_ignore_value2text_conversions=True"), None
+        )
+        try:
+            structure = service.GetStructure(exd_api.StructureRequest(handle=handle), None)
+            data_types = [ch.data_type for ch in structure.groups[0].channels]
+            self.log.info("Names: %s", [ch.name for ch in structure.groups[0].channels])
+            self.log.error("Data types: %s", [ods.DataTypeEnum.Name(dt) for dt in data_types])
+            assert [
+                ods.DT_DOUBLE,
+                ods.DT_DOUBLE,
+                ods.DT_DOUBLE,
+                ods.DT_DOUBLE,
+                ods.DT_DOUBLE,
+                ods.DT_STRING,
+                ods.DT_BYTESTR,
+                ods.DT_DOUBLE,
+                ods.DT_LONGLONG,
+                ods.DT_DOUBLE,
+                ods.DT_DOUBLE,
+            ] == data_types
+
+            values = service.GetValues(
+                exd_api.ValuesRequest(
+                    handle=handle,
+                    group_id=structure.groups[0].id,
+                    channel_ids=[ch.id for ch in structure.groups[0].channels],
+                    start=0,
+                    limit=10,
+                ),
+                None,
+            )
+            self.log.error("Values: %s", MessageToJson(values))
+
+            values_ref = ParseDict(
+                {
+                    "channels": [
+                        {
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]},
+                            }
+                        },
+                        {
+                            "id": "1",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]},
+                            },
+                        },
+                        {
+                            "id": "2",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5]},
+                            },
+                        },
+                        {
+                            "id": "3",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {
+                                    "values": [
+                                        0.0,
+                                        0.01999966666833333,
+                                        0.03999733338666616,
+                                        0.05999100040499132,
+                                        0.07997866837326832,
+                                        0.09995833854135666,
+                                        0.11992801295888919,
+                                        0.13988569467506554,
+                                        0.1598293879383454,
+                                        0.17975709839602208,
+                                    ]
+                                },
+                            },
+                        },
+                        {
+                            "id": "4",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5]},
+                            },
+                        },
+                        {
+                            "id": "5",
+                            "values": {
+                                "dataType": "DT_STRING",
+                                "stringArray": {
+                                    "values": [
+                                        "String channel sample 0",
+                                        "String channel sample 1",
+                                        "String channel sample 2",
+                                        "String channel sample 3",
+                                        "String channel sample 4",
+                                        "String channel sample 5",
+                                        "String channel sample 6",
+                                        "String channel sample 7",
+                                        "String channel sample 8",
+                                        "String channel sample 9",
+                                    ]
+                                },
+                            },
+                        },
+                        {
+                            "id": "6",
+                            "values": {
+                                "dataType": "DT_BYTESTR",
+                                "bytestrArray": {
+                                    "values": [
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                    ]
+                                },
+                            },
+                        },
+                        {
+                            "id": "7",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0]},
+                            },
+                        },
+                        {
+                            "id": "8",
+                            "values": {
+                                "dataType": "DT_LONGLONG",
+                                "longlongArray": {"values": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]},
+                            },
+                        },
+                        {
+                            "id": "9",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0]},
+                            },
+                        },
+                        {
+                            "id": "10",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [0.0, 6.0, 12.0, 18.0, 24.0, 30.0, 36.0, 42.0, 48.0, 54.0]},
+                            },
+                        },
+                    ]
+                },
+                exd_api.ValuesResult(),
+            )
+
+            assert values == values_ref
+
+        finally:
+            service.Close(handle, None)
+
+    def test_values_raw(self):
+        file_uri = self._get_example_file_uri("mdf4_demo_no_arrays.mf4")
+
+        service = ExternalDataReader()
+        handle = service.Open(
+            exd_api.Identifier(url=file_uri, parameters="values_ignore_value2text_conversions=True;values_raw=True"),
+            None,
+        )
+        try:
+            structure = service.GetStructure(exd_api.StructureRequest(handle=handle), None)
+            data_types = [ch.data_type for ch in structure.groups[0].channels]
+            self.log.info("Names: %s", [ch.name for ch in structure.groups[0].channels])
+            self.log.error("Data types: %s", [ods.DataTypeEnum.Name(dt) for dt in data_types])
+            assert [
+                ods.DT_DOUBLE,
+                ods.DT_DOUBLE,
+                ods.DT_DOUBLE,
+                ods.DT_DOUBLE,
+                ods.DT_DOUBLE,
+                ods.DT_STRING,
+                ods.DT_BYTESTR,
+                ods.DT_DOUBLE,
+                ods.DT_LONGLONG,
+                ods.DT_DOUBLE,
+                ods.DT_DOUBLE,
+            ] == data_types
+
+            values = service.GetValues(
+                exd_api.ValuesRequest(
+                    handle=handle,
+                    group_id=structure.groups[0].id,
+                    channel_ids=[ch.id for ch in structure.groups[0].channels],
+                    start=0,
+                    limit=10,
+                ),
+                None,
+            )
+            self.log.error("Values: %s", MessageToJson(values))
+
+            values_ref = ParseDict(
+                {
+                    "channels": [
+                        {
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]},
+                            }
+                        },
+                        {
+                            "id": "1",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]},
+                            },
+                        },
+                        {
+                            "id": "2",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]},
+                            },
+                        },
+                        {
+                            "id": "3",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09]},
+                            },
+                        },
+                        {
+                            "id": "4",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]},
+                            },
+                        },
+                        {
+                            "id": "5",
+                            "values": {
+                                "dataType": "DT_STRING",
+                                "stringArray": {
+                                    "values": [
+                                        "String channel sample 0",
+                                        "String channel sample 1",
+                                        "String channel sample 2",
+                                        "String channel sample 3",
+                                        "String channel sample 4",
+                                        "String channel sample 5",
+                                        "String channel sample 6",
+                                        "String channel sample 7",
+                                        "String channel sample 8",
+                                        "String channel sample 9",
+                                    ]
+                                },
+                            },
+                        },
+                        {
+                            "id": "6",
+                            "values": {
+                                "dataType": "DT_BYTESTR",
+                                "bytestrArray": {
+                                    "values": [
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                        "b29vb29vb28=",
+                                    ]
+                                },
+                            },
+                        },
+                        {
+                            "id": "7",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]},
+                            },
+                        },
+                        {
+                            "id": "8",
+                            "values": {
+                                "dataType": "DT_LONGLONG",
+                                "longlongArray": {"values": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]},
+                            },
+                        },
+                        {
+                            "id": "9",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0]},
+                            },
+                        },
+                        {
+                            "id": "10",
+                            "values": {
+                                "dataType": "DT_DOUBLE",
+                                "doubleArray": {"values": [0.0, 6.0, 12.0, 18.0, 24.0, 30.0, 36.0, 42.0, 48.0, 54.0]},
+                            },
+                        },
+                    ]
+                },
+                exd_api.ValuesResult(),
+            )
+
+            assert values == values_ref
+
+        finally:
+            service.Close(handle, None)
+
     def test_partial(self):
         file_uri = self._get_example_file_uri("PartialConversionValueRange2TextRational.mf4")
 

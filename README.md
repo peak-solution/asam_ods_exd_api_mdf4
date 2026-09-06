@@ -51,6 +51,36 @@ uv run asam-ods-exd-api-mdf4 --bind-address 127.0.0.1 --port 50051
 
 Stop the server with `Ctrl+C`. A non-zero exit code after interruption is expected.
 
+### Optional Parameters
+
+The file handler accepts optional parameters in the EXD-API `Identifier.parameters` string. Parameters are separated with semicolons, for example:
+
+```python
+parameters="values_raw=True;values_ignore_value2text_conversions=True"
+```
+
+#### `values_raw`
+
+When set to `True`, the plugin reads the raw MDF samples without applying channel conversion rules. This is useful when you want the original stored values instead of the converted engineering values.
+
+Example:
+
+```python
+exd_api.Identifier(url=file_uri, parameters="values_raw=True")
+```
+
+#### `values_ignore_value2text_conversions`
+
+When set to `True`, the plugin ignores value-to-text conversions and returns the underlying numeric or non-string values instead of the text labels created by the conversion tables. This is especially relevant for channels whose MDF conversion rules map numeric values to strings.
+
+Example:
+
+```python
+exd_api.Identifier(url=file_uri, parameters="values_ignore_value2text_conversions=True")
+```
+
+The behavior is covered by the conversion tests in [tests/test_exd_api_string_conversion.py](tests/test_exd_api_string_conversion.py), where the same MDF file is read with and without these parameters to confirm the returned data types and sample values.
+
 ### Run Plugin With uvx
 
 Run the latest published package without installing it into the current project environment:
