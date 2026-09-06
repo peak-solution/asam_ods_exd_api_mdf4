@@ -218,7 +218,14 @@ class ExternalDataFile(ExdFileInterface):
                 target.values[:] = ExternalDataFile._utf16be_decoder(section).tolist()
                 return
 
-        target.values[:] = section
+        values: list[str] = []
+        for item in np.asarray(section).ravel():
+            if isinstance(item, (bytes, bytearray, np.bytes_)):
+                values.append(item.decode("utf-8") if item else "")
+            else:
+                values.append(str(item))
+
+        target.values[:] = np.asarray(values, dtype=str)
 
     def __add_file_header(self, header: HeaderBlock | None, attributes: Any) -> None:
         if header is None:
