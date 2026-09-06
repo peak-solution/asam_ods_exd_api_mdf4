@@ -7,14 +7,18 @@ LABEL org.opencontainers.image.source=https://github.com/totonga/asam-ods-exd-ap
 LABEL org.opencontainers.image.description="ASAM ODS External Data API for MDF4 files (*.mf4)"
 LABEL org.opencontainers.image.licenses=MIT
 WORKDIR /app
+
 # Create a non-root user and change ownership of /app
 RUN useradd -ms /bin/bash appuser && chown -R appuser /app
-# Copy source code first (needed for pip install)
-COPY pyproject.toml .
+
+# Copy package metadata and source tree for a proper src-layout build
+COPY pyproject.toml ./
+COPY src ./src
+
 # Install required packages
 RUN pip3 install --upgrade pip && pip3 install .
-# should be copied at the end to avoid unnecessary rebuilds
-COPY external_data_file.py ./
+
 USER appuser
-# Start server
-CMD [ "python3", "external_data_file.py"]
+
+# Start server using the installed package entry point
+CMD ["asam-ods-exd-api-mdf4"]

@@ -1,11 +1,13 @@
 import logging
 import pathlib
 import unittest
+from importlib.metadata import PackageNotFoundError, version
 
 from google.protobuf.json_format import MessageToJson
 from ods_exd_api_box import ExternalDataReader, FileHandlerRegistry, exd_api, ods
 
-from external_data_file import ExternalDataFile
+import asam_ods_exd_api_mdf4
+from asam_ods_exd_api_mdf4 import ExternalDataFile
 
 # pylint: disable=E1101
 
@@ -70,3 +72,13 @@ class TestStringMethods(unittest.TestCase):
 
         finally:
             service.Close(handle, None)
+
+
+class TestPackageVersion(unittest.TestCase):
+    def test_version_matches_installed_package(self):
+        try:
+            expected = version("asam-ods-exd-api-mdf4")
+        except PackageNotFoundError:
+            expected = "0.0.0"
+
+        self.assertEqual(asam_ods_exd_api_mdf4.__version__, expected)
