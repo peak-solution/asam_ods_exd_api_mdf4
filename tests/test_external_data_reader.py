@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import grpc
 from asammdf import MDF
@@ -199,6 +200,35 @@ class TestExternalDataReader(unittest.TestCase):
 
             finally:
                 self.service.Close(handle1, None)
+
+    def test_fill_structure_without_acq_name(self):
+        real_mdf = MDF("data/simple.mf4")
+        try:
+            real_group = real_mdf.groups[0]
+            fake_group = SimpleNamespace(
+                channel_group=SimpleNamespace(comment=None, cycles_nr=real_group.channel_group.cycles_nr),
+                channels=real_group.channels,
+            )
+            fake_mdf = SimpleNamespace(
+                groups=[fake_group],
+                start_time=real_mdf.start_time,
+                header=SimpleNamespace(description=None, _common_properties=None),
+            )
+
+            instance = ExternalDataFile.__new__(ExternalDataFile)
+            instance._log = __import__("logging").getLogger(__name__)
+            instance.file_path = "test.mf4"
+            instance.mdf4 = fake_mdf
+            instance.values_raw = False
+            instance.values_ignore_value2text_conversions = False
+
+            structure = exd_api.StructureResult()
+            instance.fill_structure(structure)
+
+            self.assertEqual(structure.groups[0].name, "Group 0")
+            self.assertEqual(structure.groups[0].attributes.variables["description"].string_array.values[0], "")
+        finally:
+            real_mdf.close()
 
     def test_measurement_begin(self):
         main_file_path = Path.joinpath(Path(__file__).parent.resolve(), "..", "data", "simple.mf4")

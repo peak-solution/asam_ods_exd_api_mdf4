@@ -63,6 +63,15 @@ class TestExampleFiles(unittest.TestCase):
         example_file_uri = pathlib.Path(example_file).absolute().resolve().as_uri()
         self.__check_file_including_bulk(example_file_uri)
 
+    def test_mdf3_file(self):
+        """Check a single file"""
+        example_file = pathlib.Path.joinpath(
+            pathlib.Path(__file__).parent.resolve(), "..", "data", "examples", "mdf3", "all_datatypes_test_mdf3.mdf"
+        )
+        assert example_file.exists()
+        example_file_uri = pathlib.Path(example_file).absolute().resolve().as_uri()
+        self.__check_file_including_bulk(example_file_uri)
+
     def __check_file_including_bulk(self, example_file_uri: str):
         print(f"URI: {example_file_uri}")
         self.log.info("Retrieve structure")

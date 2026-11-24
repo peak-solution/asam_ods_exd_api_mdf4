@@ -252,6 +252,181 @@ class TestDataTypes(unittest.TestCase):
             finally:
                 service.Close(handle, None)
 
+    def test_data_type_mdf3(self):
+        with tempfile.TemporaryDirectory() as temporary_directory_name:
+            file_path = os.path.join(temporary_directory_name, "all_datatypes_test.mdf")
+            timestamps = [0, 1]
+
+            with MDF(version="3.30", file_comment="all_datatypes_test.mdf") as mdf3:
+                mdf3.start_time = datetime.now()
+                integer_signals = [
+                    Signal(
+                        samples=np.array([-2, 4], np.int8),
+                        timestamps=timestamps,
+                        comment="int8 data",
+                        name="int8_data",
+                        unit="ns",
+                    ),
+                    Signal(
+                        samples=np.array([2, 4], np.uint8),
+                        timestamps=timestamps,
+                        comment="uint8 data",
+                        name="uint8_data",
+                        unit="ns",
+                    ),
+                    Signal(
+                        samples=np.array([-2, 4], np.int16),
+                        timestamps=timestamps,
+                        comment="int16 data",
+                        name="int16_data",
+                        unit="ns",
+                    ),
+                    Signal(
+                        samples=np.array([2, 4], np.uint16),
+                        timestamps=timestamps,
+                        comment="uint16 data",
+                        name="uint16_data",
+                        unit="ns",
+                    ),
+                    Signal(
+                        samples=np.array([-2, 4], np.int32),
+                        timestamps=timestamps,
+                        comment="int32 data",
+                        name="int32_data",
+                        unit="ns",
+                    ),
+                    Signal(
+                        samples=np.array([2, 4], np.uint32),
+                        timestamps=timestamps,
+                        comment="uint32 data",
+                        name="uint32_data",
+                        unit="ns",
+                    ),
+                    Signal(
+                        samples=np.array([-2, 4], np.int64),
+                        timestamps=timestamps,
+                        comment="int64 data",
+                        name="int64_data",
+                        unit="ns",
+                    ),
+                    Signal(
+                        samples=np.array([2, 4], np.uint64),
+                        timestamps=timestamps,
+                        comment="uint64 data",
+                        name="uint64_data",
+                        unit="ns",
+                    ),
+                ]
+                mdf3.append(integer_signals, comment="group_int", common_timebase=True)
+                mdf3.append(
+                    [
+                        Signal(
+                            samples=np.array([1.1, 1.2], np.float32),
+                            timestamps=timestamps,
+                            comment="float32 data",
+                            name="float32_data",
+                            unit="ns",
+                        ),
+                        Signal(
+                            samples=np.array([2.1, 2.2], np.float64),
+                            timestamps=timestamps,
+                            comment="float64 data",
+                            name="float64_data",
+                            unit="ns",
+                        ),
+                    ],
+                    comment="group_real",
+                    common_timebase=True,
+                )
+                mdf3.append(
+                    [
+                        Signal(
+                            samples=["abc", "def"],
+                            timestamps=timestamps,
+                            comment="string data",
+                            name="string_data",
+                            unit="ns",
+                            encoding="utf-8",
+                        )
+                    ],
+                    comment="group_string",
+                    common_timebase=True,
+                )
+                mdf3.save(file_path, compression=2, overwrite=True)
+
+            service = ExternalDataReader()
+            handle = service.Open(exd_api.Identifier(url=Path(file_path).resolve().as_uri(), parameters=""), None)
+            try:
+                structure = service.GetStructure(exd_api.StructureRequest(handle=handle), None)
+                self.log.info(MessageToJson(structure))
+
+                self.assertEqual(structure.name, "all_datatypes_test.mdf")
+                self.assertEqual(len(structure.groups), 3)
+                self.assertEqual(structure.groups[0].number_of_rows, 2)
+                self.assertEqual(len(structure.groups[0].channels), 9)
+                self.assertEqual(structure.groups[1].number_of_rows, 2)
+                self.assertEqual(len(structure.groups[1].channels), 3)
+                self.assertEqual(structure.groups[2].number_of_rows, 2)
+                self.assertEqual(len(structure.groups[2].channels), 2)
+
+                integer_types = [
+                    ods.DataTypeEnum.DT_SHORT,
+                    ods.DataTypeEnum.DT_BYTE,
+                    ods.DataTypeEnum.DT_SHORT,
+                    ods.DataTypeEnum.DT_LONG,
+                    ods.DataTypeEnum.DT_LONG,
+                    ods.DataTypeEnum.DT_LONGLONG,
+                    ods.DataTypeEnum.DT_LONGLONG,
+                    ods.DataTypeEnum.DT_DOUBLE,
+                ]
+                for channel_index, data_type in enumerate(integer_types, start=1):
+                    self.assertEqual(structure.groups[0].channels[channel_index].data_type, data_type)
+
+                self.assertEqual(structure.groups[1].channels[1].data_type, ods.DataTypeEnum.DT_FLOAT)
+                self.assertEqual(structure.groups[1].channels[2].data_type, ods.DataTypeEnum.DT_DOUBLE)
+                self.assertEqual(structure.groups[2].channels[1].data_type, ods.DataTypeEnum.DT_STRING)
+
+                values = service.GetValues(
+                    exd_api.ValuesRequest(
+                        handle=handle, group_id=0, start=0, limit=2, channel_ids=list(range(9))
+                    ),
+                    None,
+                )
+                integer_types_and_values = [
+                    (ods.DataTypeEnum.DT_SHORT, "long_array", [-2, 4]),
+                    (ods.DataTypeEnum.DT_BYTE, "byte_array", [2, 4]),
+                    (ods.DataTypeEnum.DT_SHORT, "long_array", [-2, 4]),
+                    (ods.DataTypeEnum.DT_LONG, "long_array", [2, 4]),
+                    (ods.DataTypeEnum.DT_LONG, "long_array", [-2, 4]),
+                    (ods.DataTypeEnum.DT_LONGLONG, "longlong_array", [2, 4]),
+                    (ods.DataTypeEnum.DT_LONGLONG, "longlong_array", [-2, 4]),
+                    (ods.DataTypeEnum.DT_DOUBLE, "double_array", [2.0, 4.0]),
+                ]
+                for channel_index, (data_type, array_name, expected_values) in enumerate(
+                    integer_types_and_values, start=1
+                ):
+                    channel_values = values.channels[channel_index].values
+                    self.assertEqual(channel_values.data_type, data_type)
+                    self.assertSequenceEqual(getattr(channel_values, array_name).values, expected_values)
+
+                values = service.GetValues(
+                    exd_api.ValuesRequest(handle=handle, group_id=1, start=0, limit=2, channel_ids=[0, 1, 2]), None
+                )
+                self.assertEqual(values.channels[1].values.data_type, ods.DataTypeEnum.DT_FLOAT)
+                self.assertSequenceEqual(
+                    values.channels[1].values.float_array.values, [1.100000023841858, 1.2000000476837158]
+                )
+                self.assertEqual(values.channels[2].values.data_type, ods.DataTypeEnum.DT_DOUBLE)
+                self.assertSequenceEqual(values.channels[2].values.double_array.values, [2.1, 2.2])
+
+                values = service.GetValues(
+                    exd_api.ValuesRequest(handle=handle, group_id=2, start=0, limit=2, channel_ids=[0, 1]), None
+                )
+                self.assertEqual(values.channels[1].values.data_type, ods.DataTypeEnum.DT_STRING)
+                self.assertSequenceEqual(values.channels[1].values.string_array.values, ["abc", "def"])
+            finally:
+                service.Close(handle, None)
+
     def test_independent(self):
         with tempfile.TemporaryDirectory() as temporary_directory_name:
             file_path = os.path.join(temporary_directory_name, "independent_test.mf4")
@@ -313,6 +488,31 @@ class TestDataTypes(unittest.TestCase):
                 self.assertSequenceEqual(values.channels[0].values.double_array.values, [0.0, 1.0])
                 self.assertEqual(values.channels[1].values.data_type, ods.DataTypeEnum.DT_LONG)
                 self.assertSequenceEqual(values.channels[1].values.long_array.values, [2, 4])
+            finally:
+                service.Close(handle, None)
+
+    def test_mdf3_latin1_string_get_values(self):
+        with tempfile.TemporaryDirectory() as temporary_directory_name:
+            file_path = os.path.join(temporary_directory_name, "string_test.mdf")
+            with MDF(version="3.30") as mdf3:
+                mdf3.append(
+                    Signal(
+                        samples=["Grüße", "façade"],
+                        timestamps=[0, 1],
+                        name="string_data",
+                        encoding="latin-1",
+                    )
+                )
+                mdf3.save(file_path, overwrite=True)
+
+            service = ExternalDataReader()
+            handle = service.Open(exd_api.Identifier(url=Path(file_path).resolve().as_uri(), parameters=""), None)
+            try:
+                values = service.GetValues(
+                    exd_api.ValuesRequest(handle=handle, group_id=0, start=0, limit=2, channel_ids=[1]), None
+                )
+                self.assertEqual(values.channels[0].values.data_type, ods.DataTypeEnum.DT_STRING)
+                self.assertSequenceEqual(values.channels[0].values.string_array.values, ["Grüße", "façade"])
             finally:
                 service.Close(handle, None)
 
