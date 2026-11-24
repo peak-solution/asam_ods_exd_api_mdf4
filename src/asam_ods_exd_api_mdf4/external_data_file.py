@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, cast, override
 
 import numpy as np
 from asammdf import MDF
 from asammdf.blocks.v4_blocks import Channel, ChannelConversion, HeaderBlock
-from ods_exd_api_box import ExdFileInterface, exd_api, ods
+from ods_exd_api_box import ExdFileInterface, NotMyFileError, exd_api, ods
 from ods_exd_api_box.utils import ParamParser
 
 
@@ -49,6 +50,13 @@ class ExternalDataFile(ExdFileInterface):
         self.values_ignore_value2text_conversions: bool = self._get_bool(
             params, "values_ignore_value2text_conversions", False
         )
+        ambiguous_extension = Path(file_path).suffix.lower() == ".dat"
+        if ambiguous_extension:
+            with open(file_path, "rb") as file:
+                magic_header = file.read(8).strip()
+            if magic_header not in (b"MDF", b"UnFinMF"):
+                raise NotMyFileError(f"File '{file_path}' is not an ASAM MDF file")
+
         self.mdf4 = MDF(file_path)
         self._log.debug("ExternalDataFile initialized")
 
@@ -434,7 +442,11 @@ def main() -> None:
     """Run plugin server entry point."""
     from ods_exd_api_box import serve_plugin
 
-    serve_plugin(file_type_name="MDF4", file_type_factory=ExternalDataFile.create, file_type_file_patterns=["*.mf4"])
+    serve_plugin(
+        file_type_name="MDF4",
+        file_type_factory=ExternalDataFile.create,
+        file_type_file_patterns=["*.mf4", "*.mdf", "*.dat"],
+    )
 
 
 if __name__ == "__main__":

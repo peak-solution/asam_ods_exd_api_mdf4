@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import grpc
 from asammdf import MDF
 from google.protobuf.json_format import MessageToJson
-from ods_exd_api_box import ExternalDataReader, FileHandlerRegistry, exd_api
+from ods_exd_api_box import ExternalDataReader, FileHandlerRegistry, NotMyFileError, exd_api
 
 from asam_ods_exd_api_mdf4 import ExternalDataFile
 from tests.mock_servicer_context import MockServicerContext
@@ -43,6 +43,54 @@ class TestExternalDataReader(unittest.TestCase):
             self.service.Open(identifier, self.mock_context)
 
         self.assertEqual(self.mock_context.code(), grpc.StatusCode.NOT_FOUND)
+
+    def test_open_mdf_file_with_dat_extension(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "test.dat"
+            mdf3_path = Path(temp_dir) / "test.mdf"
+            with MDF(version="3.30") as mdf3:
+                mdf3.start_time = datetime.now()
+                mdf3.save(mdf3_path, overwrite=True)
+            mdf3_path.rename(file_path)
+
+            handle = self.service.Open(exd_api.Identifier(url=file_path.as_uri(), parameters=""), self.mock_context)
+            try:
+                self.assertIsNotNone(handle.uuid)
+            finally:
+                self.service.Close(handle, self.mock_context)
+
+    def test_open_mdf4_file_with_dat_extension(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "test.dat"
+            mdf4_path = Path(temp_dir) / "test.mf4"
+            with MDF(version="4.10") as mdf4:
+                mdf4.save(mdf4_path, overwrite=True)
+            mdf4_path.rename(file_path)
+
+            handle = self.service.Open(exd_api.Identifier(url=file_path.as_uri(), parameters=""), self.mock_context)
+            try:
+                self.assertIsNotNone(handle.uuid)
+            finally:
+                self.service.Close(handle, self.mock_context)
+
+    def test_reject_non_mdf_file_with_dat_extension(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "test.dat"
+            file_path.write_bytes(b"not an MDF file")
+
+            with self.assertRaises(grpc.RpcError):
+                self.service.Open(exd_api.Identifier(url=file_path.as_uri(), parameters=""), self.mock_context)
+
+            self.assertEqual(self.mock_context.code(), grpc.StatusCode.FAILED_PRECONDITION)
+            self.assertEqual(self.mock_context.details(), "Not my file!")
+
+    def test_dat_factory_raises_not_my_file_error(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "test.dat"
+            file_path.write_bytes(b"not an MDF file")
+
+            with self.assertRaises(NotMyFileError):
+                ExternalDataFile.create(str(file_path), "")
 
     def test_simple_example(self):
         main_file_path = Path.joinpath(Path(__file__).parent.resolve(), "..", "data", "simple.mf4")
