@@ -15,12 +15,9 @@
         "frompyfunc",
         "tobytes"
     ],
-    "python.testing.unittestArgs": [
-        "-v",
-        "-s",
-        "./tests",
-        "-p",
-        "test_*.py"
+    "python.testing.pytestArgs": [
+        "tests"
     ],
-    "python.testing.unittestEnabled": true
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false
 }

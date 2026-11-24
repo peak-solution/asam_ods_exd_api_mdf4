@@ -4,6 +4,7 @@ import pathlib
 import unittest
 from glob import glob
 
+import pytest
 from ods_exd_api_box import ExternalDataReader, FileHandlerRegistry, exd_api, ods
 
 from asam_ods_exd_api_mdf4 import ExternalDataFile
@@ -43,25 +44,12 @@ class TestExampleFiles(unittest.TestCase):
         assert independent_attr.HasField("long_array"), "Independent attribute should be a long_array"
         return independent_attr.long_array.values[0] == 1
 
-    def test_files(self):
-        """Parameterized test over all example files using unittest subTest."""
-        example_files_folder = pathlib.Path.joinpath(pathlib.Path(__file__).parent.resolve(), "..", "data", "examples")
-        example_files = [y for x in os.walk(example_files_folder) for y in glob(os.path.join(x[0], "*.mf4"))]
-        self.assertGreater(len(example_files), 0, "No .mf4 example files found")
-
-        for example_file in example_files:
-            example_file_path = pathlib.Path(example_file)
-            example_file_uri = example_file_path.absolute().resolve().as_uri()
-            relative_example_file = example_file_path.relative_to(example_files_folder)
-            with self.subTest(example_file=str(relative_example_file)):
-                self.__check_file_including_bulk(example_file_uri)
-
     def test_file(self):
         """Check a single file"""
         example_file = pathlib.Path.joinpath(pathlib.Path(__file__).parent.resolve(), "..", "data", "simple.mf4")
         assert example_file.exists()
         example_file_uri = pathlib.Path(example_file).absolute().resolve().as_uri()
-        self.__check_file_including_bulk(example_file_uri)
+        self.check_file_including_bulk(example_file_uri)
 
     def test_mdf3_file(self):
         """Check a single file"""
@@ -70,9 +58,9 @@ class TestExampleFiles(unittest.TestCase):
         )
         assert example_file.exists()
         example_file_uri = pathlib.Path(example_file).absolute().resolve().as_uri()
-        self.__check_file_including_bulk(example_file_uri)
+        self.check_file_including_bulk(example_file_uri)
 
-    def __check_file_including_bulk(self, example_file_uri: str):
+    def check_file_including_bulk(self, example_file_uri: str):
         print(f"URI: {example_file_uri}")
         self.log.info("Retrieve structure")
         structure = self.__load_structure(example_file_uri)
@@ -146,3 +134,23 @@ class TestExampleFiles(unittest.TestCase):
                         self.assertFalse(True, f"Unknown type {values_channel.values.data_type}")
         finally:
             service.Close(handle, self.mock_context)
+
+
+EXAMPLE_FILES_FOLDER = pathlib.Path(__file__).parent.parent / "data" / "examples"
+EXAMPLE_FILES = sorted(
+    pathlib.Path(file_path)
+    for root, _, _ in os.walk(EXAMPLE_FILES_FOLDER)
+    for pattern in ("*.mf4", "*.MF4")
+    for file_path in glob(os.path.join(root, pattern))
+)
+
+
+@pytest.mark.parametrize(
+    "example_file",
+    EXAMPLE_FILES,
+    ids=lambda example_file: str(example_file.relative_to(EXAMPLE_FILES_FOLDER)),
+)
+def test_example_file(example_file: pathlib.Path):
+    test_case = TestExampleFiles()
+    test_case.setUp()
+    test_case.check_file_including_bulk(example_file.absolute().resolve().as_uri())
