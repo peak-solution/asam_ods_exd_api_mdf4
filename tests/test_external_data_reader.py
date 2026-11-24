@@ -3,11 +3,12 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import grpc
 from asammdf import MDF
 from google.protobuf.json_format import MessageToJson
-from ods_exd_api_box import ExternalDataReader, FileHandlerRegistry, exd_api
+from ods_exd_api_box import ExternalDataReader, FileHandlerRegistry, NotMyFileError, exd_api
 
 from asam_ods_exd_api_mdf4 import ExternalDataFile
 from tests.mock_servicer_context import MockServicerContext
@@ -42,6 +43,54 @@ class TestExternalDataReader(unittest.TestCase):
             self.service.Open(identifier, self.mock_context)
 
         self.assertEqual(self.mock_context.code(), grpc.StatusCode.NOT_FOUND)
+
+    def test_open_mdf_file_with_dat_extension(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "test.dat"
+            mdf3_path = Path(temp_dir) / "test.mdf"
+            with MDF(version="3.30") as mdf3:
+                mdf3.start_time = datetime.now()
+                mdf3.save(mdf3_path, overwrite=True)
+            mdf3_path.rename(file_path)
+
+            handle = self.service.Open(exd_api.Identifier(url=file_path.as_uri(), parameters=""), self.mock_context)
+            try:
+                self.assertIsNotNone(handle.uuid)
+            finally:
+                self.service.Close(handle, self.mock_context)
+
+    def test_open_mdf4_file_with_dat_extension(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "test.dat"
+            mdf4_path = Path(temp_dir) / "test.mf4"
+            with MDF(version="4.10") as mdf4:
+                mdf4.save(mdf4_path, overwrite=True)
+            mdf4_path.rename(file_path)
+
+            handle = self.service.Open(exd_api.Identifier(url=file_path.as_uri(), parameters=""), self.mock_context)
+            try:
+                self.assertIsNotNone(handle.uuid)
+            finally:
+                self.service.Close(handle, self.mock_context)
+
+    def test_reject_non_mdf_file_with_dat_extension(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "test.dat"
+            file_path.write_bytes(b"not an MDF file")
+
+            with self.assertRaises(grpc.RpcError):
+                self.service.Open(exd_api.Identifier(url=file_path.as_uri(), parameters=""), self.mock_context)
+
+            self.assertEqual(self.mock_context.code(), grpc.StatusCode.FAILED_PRECONDITION)
+            self.assertEqual(self.mock_context.details(), "Not my file!")
+
+    def test_dat_factory_raises_not_my_file_error(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "test.dat"
+            file_path.write_bytes(b"not an MDF file")
+
+            with self.assertRaises(NotMyFileError):
+                ExternalDataFile.create(str(file_path), "")
 
     def test_simple_example(self):
         main_file_path = Path.joinpath(Path(__file__).parent.resolve(), "..", "data", "simple.mf4")
@@ -199,6 +248,35 @@ class TestExternalDataReader(unittest.TestCase):
 
             finally:
                 self.service.Close(handle1, None)
+
+    def test_fill_structure_without_acq_name(self):
+        real_mdf = MDF("data/simple.mf4")
+        try:
+            real_group = real_mdf.groups[0]
+            fake_group = SimpleNamespace(
+                channel_group=SimpleNamespace(comment=None, cycles_nr=real_group.channel_group.cycles_nr),
+                channels=real_group.channels,
+            )
+            fake_mdf = SimpleNamespace(
+                groups=[fake_group],
+                start_time=real_mdf.start_time,
+                header=SimpleNamespace(description=None, _common_properties=None),
+            )
+
+            instance = ExternalDataFile.__new__(ExternalDataFile)
+            instance._log = __import__("logging").getLogger(__name__)
+            instance.file_path = "test.mf4"
+            instance.mdf4 = fake_mdf
+            instance.values_raw = False
+            instance.values_ignore_value2text_conversions = False
+
+            structure = exd_api.StructureResult()
+            instance.fill_structure(structure)
+
+            self.assertEqual(structure.groups[0].name, "Group 0")
+            self.assertEqual(structure.groups[0].attributes.variables["description"].string_array.values[0], "")
+        finally:
+            real_mdf.close()
 
     def test_measurement_begin(self):
         main_file_path = Path.joinpath(Path(__file__).parent.resolve(), "..", "data", "simple.mf4")
