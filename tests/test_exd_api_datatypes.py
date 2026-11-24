@@ -387,9 +387,7 @@ class TestDataTypes(unittest.TestCase):
                 self.assertEqual(structure.groups[2].channels[1].data_type, ods.DataTypeEnum.DT_STRING)
 
                 values = service.GetValues(
-                    exd_api.ValuesRequest(
-                        handle=handle, group_id=0, start=0, limit=2, channel_ids=list(range(9))
-                    ),
+                    exd_api.ValuesRequest(handle=handle, group_id=0, start=0, limit=2, channel_ids=list(range(9))),
                     None,
                 )
                 integer_types_and_values = [

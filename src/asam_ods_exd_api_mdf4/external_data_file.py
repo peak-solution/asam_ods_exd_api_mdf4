@@ -188,7 +188,7 @@ class ExternalDataFile(ExdFileInterface):
                 if section_array.dtype != np.int64:
                     try:
                         section_array = section_array.astype(np.int64, copy=False)
-                    except TypeError, ValueError:
+                    except (TypeError, ValueError):
                         pass
                 new_channel_values.values.longlong_array.values[:] = section_array
             elif channel_datatype == ods.DataTypeEnum.DT_FLOAT:
