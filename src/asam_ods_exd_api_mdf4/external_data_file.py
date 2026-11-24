@@ -72,16 +72,17 @@ class ExternalDataFile(ExdFileInterface):
         self._log.debug("Found %d groups in MDF", len(mdf4.groups))
         for group_index, group in enumerate(mdf4.groups):
             group_any = cast(Any, group)
+            channel_group = getattr(group_any, "channel_group", None)
+            group_name = getattr(channel_group, "acq_name", None)
+            group_comment = getattr(channel_group, "comment", None)
+            group_cycles_nr = getattr(channel_group, "cycles_nr", 0)
+
             new_group = exd_api.StructureResult.Group()
-            new_group.name = (
-                group_any.channel_group.acq_name
-                if group_any.channel_group.acq_name is not None
-                else f"Group {group_index}"
-            )  # type: ignore
+            new_group.name = group_name if group_name is not None and group_name != "" else f"Group {group_index}"
             new_group.id = group_index
             new_group.total_number_of_channels = len(group_any.channels)
-            new_group.number_of_rows = group_any.channel_group.cycles_nr
-            new_group.attributes.variables["description"].string_array.values.append(group_any.channel_group.comment)
+            new_group.number_of_rows = group_cycles_nr
+            new_group.attributes.variables["description"].string_array.values.append(group_comment or "")
             new_group.attributes.variables["measurement_begin"].string_array.values.append(start_time_ods)
 
             independent_added = False
@@ -93,7 +94,8 @@ class ExternalDataFile(ExdFileInterface):
                 new_channel.unit_string = channel.unit
                 if channel.comment is not None and "" != channel.comment:  # type: ignore
                     new_channel.attributes.variables["description"].string_array.values.append(channel.comment)
-                if channel.channel_type in (2, 3):  # MASTER or VIRTUAL_MASTE channel
+                master_channel_types = (1,) if self._is_mdf3() else (2, 3)
+                if channel.channel_type in master_channel_types:
                     if not independent_added:
                         new_channel.attributes.variables["independent"].long_array.values.append(1)
                         independent_added = True
@@ -186,7 +188,7 @@ class ExternalDataFile(ExdFileInterface):
                 if section_array.dtype != np.int64:
                     try:
                         section_array = section_array.astype(np.int64, copy=False)
-                    except TypeError, ValueError:
+                    except (TypeError, ValueError):
                         pass
                 new_channel_values.values.longlong_array.values[:] = section_array
             elif channel_datatype == ods.DataTypeEnum.DT_FLOAT:
@@ -206,7 +208,9 @@ class ExternalDataFile(ExdFileInterface):
                     real_values_d.append(complex_value.imag)
                 new_channel_values.values.double_array.values[:] = real_values_d
             elif channel_datatype == ods.DataTypeEnum.DT_STRING:
-                ExternalDataFile._assign_strings(new_channel_values.values.string_array, section, channel)
+                ExternalDataFile._assign_strings(
+                    new_channel_values.values.string_array, section, channel, self._is_mdf3()
+                )
             elif channel_datatype == ods.DataTypeEnum.DT_BYTESTR:
                 for item in section:
                     new_channel_values.values.bytestr_array.values.append(item.tobytes())
@@ -221,8 +225,11 @@ class ExternalDataFile(ExdFileInterface):
         return rv
 
     @staticmethod
-    def _assign_strings(target: ods.StringArray, section: np.ndarray, channel: Any) -> None:
+    def _assign_strings(target: ods.StringArray, section: np.ndarray, channel: Any, is_mdf3: bool = False) -> None:
         if section.dtype.kind == "S":
+            if is_mdf3 and channel.data_type == 7:
+                target.values[:] = ExternalDataFile._latin1_decoder(section).tolist()
+                return
             if channel.data_type == 6:
                 # Latin-1 (ISO-8859-1) encoding
                 target.values[:] = ExternalDataFile._latin1_decoder(section).tolist()
@@ -278,6 +285,13 @@ class ExternalDataFile(ExdFileInterface):
         self, rv: ods.DataTypeEnum, conversion: ChannelConversion | None
     ) -> ods.DataTypeEnum:
         if conversion is not None:
+            if self._is_mdf3():
+                if conversion.conversion_type in (0, 1, 2, 6, 7, 8, 9, 10):
+                    return ods.DataTypeEnum.DT_DOUBLE
+                if conversion.conversion_type in (11, 12) and not self.values_ignore_value2text_conversions:
+                    return ods.DataTypeEnum.DT_STRING
+                return rv
+
             if ods.DataTypeEnum.DT_STRING == rv:
                 if 9 == conversion.conversion_type:
                     # text to value tabular look-up
@@ -293,6 +307,9 @@ class ExternalDataFile(ExdFileInterface):
         return rv
 
     def __get_channel_data_type_base(self, channel: Channel) -> ods.DataTypeEnum:
+        if self._is_mdf3():
+            return self.__get_mdf3_channel_data_type(channel)
+
         # [width="100",options="header"]
         # |====================
         # | number | cn_bit_count | DataTypeEnum | description
@@ -366,6 +383,51 @@ class ExternalDataFile(ExdFileInterface):
                 return ods.DataTypeEnum.DT_DCOMPLEX
 
         return ods.DataTypeEnum.DT_DOUBLE
+
+    def __get_mdf3_channel_data_type(self, channel: Channel) -> ods.DataTypeEnum:
+        # MDF 2/3 uses a different data_type numbering than MDF4. In particular,
+        # codes 13 and 14 are unsigned and signed Intel integers, not dates.
+        mdf3_data_type = channel.data_type
+        mdf3_data_bit_count = channel.bit_count
+
+        if mdf3_data_type in (0, 9, 13):
+            if mdf3_data_bit_count == 1:
+                return ods.DataTypeEnum.DT_BOOLEAN
+            if 2 <= mdf3_data_bit_count <= 8:
+                return ods.DataTypeEnum.DT_BYTE
+            if 9 <= mdf3_data_bit_count <= 15:
+                return ods.DataTypeEnum.DT_SHORT
+            if 16 <= mdf3_data_bit_count <= 31:
+                return ods.DataTypeEnum.DT_LONG
+            if 32 <= mdf3_data_bit_count <= 63:
+                return ods.DataTypeEnum.DT_LONGLONG
+            if mdf3_data_bit_count == 64:
+                return ods.DataTypeEnum.DT_DOUBLE
+
+        if mdf3_data_type in (1, 10, 14):
+            if mdf3_data_bit_count == 1:
+                return ods.DataTypeEnum.DT_BOOLEAN
+            if 2 <= mdf3_data_bit_count <= 16:
+                return ods.DataTypeEnum.DT_SHORT
+            if 17 <= mdf3_data_bit_count <= 32:
+                return ods.DataTypeEnum.DT_LONG
+            if 33 <= mdf3_data_bit_count <= 64:
+                return ods.DataTypeEnum.DT_LONGLONG
+
+        if mdf3_data_type in (2, 11, 15):
+            return ods.DataTypeEnum.DT_FLOAT
+        if mdf3_data_type in (3, 12, 16):
+            return ods.DataTypeEnum.DT_DOUBLE
+        if mdf3_data_type == 7:
+            return ods.DataTypeEnum.DT_STRING
+        if mdf3_data_type == 8:
+            return ods.DataTypeEnum.DT_BYTESTR
+
+        return ods.DataTypeEnum.DT_DOUBLE
+
+    def _is_mdf3(self) -> bool:
+        version = getattr(self.mdf4, "version", "4.00")
+        return int(float(version)) < 4
 
 
 def main() -> None:
